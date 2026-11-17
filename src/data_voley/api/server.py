@@ -116,6 +116,7 @@ class StudioSession:
         self.hybrid = HybridTaggingController(stats_engine=self.stats)
         self.trajectories: List[Dict[str, Any]] = []
         self.set_scoreboards: Dict[int, Dict[str, Any]] = {}
+        self.score_progression_by_set: Dict[int, List[Dict[str, Any]]] = {}
         self.referee_notes_by_set: Dict[int, Dict[str, int]] = {}
         self.active_scope: str = "ALL"
         self.current_proposal: Optional[Dict[str, Any]] = None
@@ -181,8 +182,44 @@ class StudioSession:
             self.set_scoreboards = {
                 1: {"HOME": 0, "AWAY": 0, "status": "EN JUEGO", "target_pts": 25},
             }
+            self.score_progression_by_set = {1: []}
             self.referee_notes_by_set = {1: {"inferred_cuts_and_ref": 0}}
             self.generate_ai_proposal()
+
+    @staticmethod
+    def _build_realistic_point_sequence(
+        h_target: int, a_target: int, target_limit: int, rng: random.Random
+    ) -> List[TeamSide]:
+        """
+        Construct a realistic rally-by-rally winner sequence that ends at (h_target, a_target)
+        and guarantees the set winner scores the clinching final point(s).
+        """
+        if h_target == 0 and a_target == 0:
+            return []
+
+        if h_target > a_target:
+            if h_target > target_limit and a_target >= target_limit - 1:
+                # Deuce set won by HOME: tie at (a_target, a_target) then 2 HOME points
+                pool = [TeamSide.HOME] * a_target + [TeamSide.AWAY] * a_target
+                rng.shuffle(pool)
+                return pool + [TeamSide.HOME] * (h_target - a_target)
+            pool = [TeamSide.HOME] * (h_target - 1) + [TeamSide.AWAY] * a_target
+            rng.shuffle(pool)
+            return pool + [TeamSide.HOME]
+
+        if a_target > h_target:
+            if a_target > target_limit and h_target >= target_limit - 1:
+                # Deuce set won by AWAY: tie at (h_target, h_target) then 2 AWAY points
+                pool = [TeamSide.HOME] * h_target + [TeamSide.AWAY] * h_target
+                rng.shuffle(pool)
+                return pool + [TeamSide.AWAY] * (a_target - h_target)
+            pool = [TeamSide.HOME] * h_target + [TeamSide.AWAY] * (a_target - 1)
+            rng.shuffle(pool)
+            return pool + [TeamSide.AWAY]
+
+        pool = [TeamSide.HOME] * h_target + [TeamSide.AWAY] * a_target
+        rng.shuffle(pool)
+        return pool
 
     def seed_initial_data(
         self,
@@ -209,6 +246,7 @@ class StudioSession:
         self.hybrid = HybridTaggingController(stats_engine=self.stats)
         self.trajectories.clear()
         self.set_scoreboards.clear()
+        self.score_progression_by_set.clear()
         self.referee_notes_by_set.clear()
         self.active_scope = "ALL"
 
@@ -262,11 +300,13 @@ class StudioSession:
             self.tactical._score = {TeamSide.HOME: 0, TeamSide.AWAY: 0}
             self.tactical.set_rotation(TeamSide.HOME, home_rot)
 
-            # Build point sequence of exact length (h_target + a_target)
-            point_winners: List[TeamSide] = (
-                [TeamSide.HOME] * h_target + [TeamSide.AWAY] * a_target
+            # Build realistic point sequence ending at (h_target, a_target)
+            point_winners: List[TeamSide] = self._build_realistic_point_sequence(
+                h_target, a_target, target_limit, rng
             )
-            rng.shuffle(point_winners)
+            self.score_progression_by_set[s_num] = []
+            running_h = 0
+            running_a = 0
 
             # Vulnerability rotation for this set (e.g. R3 in Set 1, R5 in Set 2, R1 in Set 3)
             vuln_rot = Rotation(((s_num * 2) % 6) + 1)
@@ -278,12 +318,14 @@ class StudioSession:
             cur_serving = initial_server if s_num % 2 == 1 else initial_server.opponent()
             self.tactical._serving_team = cur_serving
 
-            for pt_winner in point_winners:
+            for pt_idx, pt_winner in enumerate(point_winners, start=1):
                 cur_rot = self.tactical.get_rotation(TeamSide.HOME)
                 o_zone = rng.choice(attack_zones_pool)
                 t_zone = rng.choice(target_zones_pool)
+                point_reason = ""
 
                 if pt_winner == TeamSide.HOME:
+                    running_h += 1
                     # Point won by HOME
                     is_ace = rng.random() < 0.14 and cur_serving == TeamSide.HOME
                     srv_out = ServeOutcome.ACE if is_ace else ServeOutcome.IN_PLAY
@@ -294,7 +336,10 @@ class StudioSession:
                             target_zone=t_zone,
                             set_override=s_num,
                         )
-                    if not is_ace:
+                    if is_ace:
+                        point_reason = f"Ace ({cur_rot.name})"
+                    else:
+                        point_reason = f"Remate Z{o_zone.value}"
                         self.stats.record_setting_action(
                             team=TeamSide.HOME,
                             target_zone=o_zone,
@@ -318,6 +363,7 @@ class StudioSession:
                             rng,
                         )
                 else:
+                    running_a += 1
                     # Point won by AWAY (either HOME serve error, HOME attack error, or AWAY kill)
                     if cur_serving == TeamSide.HOME and cur_rot == vuln_rot:
                         srv_err = (
@@ -330,6 +376,9 @@ class StudioSession:
                             outcome=srv_err,
                             target_zone=t_zone,
                             set_override=s_num,
+                        )
+                        point_reason = (
+                            "Saque Red" if srv_err == ServeOutcome.ERROR_NET else "Saque Fuera"
                         )
                     else:
                         if cur_serving == TeamSide.HOME:
@@ -379,14 +428,33 @@ class StudioSession:
                             ev.inferred_attacker_role.value,
                             rng,
                         )
+                        point_reason = (
+                            "Dobles Coloc."
+                            if set_out == SetOutcome.ERROR_DOUBLES
+                            else ("Bloqueo Rival" if atk_err == AttackOutcome.BLOCKED else "Punto Rival")
+                        )
 
                 # Advance rotation on side-out
-                if pt_winner != cur_serving:
+                side_out = pt_winner != cur_serving
+                if side_out:
                     cur_serving = pt_winner
                     self.tactical._serving_team = cur_serving
                     self.tactical._rotations[pt_winner] = (
                         self.tactical._rotations[pt_winner].next_rotation()
                     )
+
+                self.score_progression_by_set[s_num].append(
+                    {
+                        "rally": pt_idx,
+                        "home": running_h,
+                        "away": running_a,
+                        "score": f"{running_h}-{running_a}",
+                        "scorer": pt_winner.value,
+                        "side_out": side_out,
+                        "home_rotation": self.tactical.get_rotation(TeamSide.HOME).name,
+                        "reason": point_reason,
+                    }
+                )
 
             # Guarantee clear vulnerability signature in vuln_rot for this set
             saved_r = self.tactical.get_rotation(TeamSide.HOME)
@@ -634,6 +702,9 @@ def _serialize_state() -> Dict[str, Any]:
         "active_scope": scope_str,
         "available_sets": recorded_sets,
         "set_scoreboards": {str(k): v for k, v in SESSION.set_scoreboards.items()},
+        "score_progression": {
+            str(k): v for k, v in SESSION.score_progression_by_set.items()
+        },
         "match": {
             "match_format": SESSION.match_format,
             "max_sets": SESSION.max_sets,
@@ -741,9 +812,21 @@ def register_rally(req: RallyRequest) -> Dict[str, Any]:
         notes = SESSION.referee_notes_by_set.setdefault(c_set, {"inferred_cuts_and_ref": 0})
         notes["inferred_cuts_and_ref"] += 1
     if SESSION.tactical.match_finished:
-        # Allow incrementing score even if match was marked finished during demo
         SESSION.tactical._match_finished = False
-    SESSION.tactical.register_rally_point(winner=winner)
+    ev = SESSION.tactical.register_rally_point(winner=winner)
+    prog_list = SESSION.score_progression_by_set.setdefault(c_set, [])
+    prog_list.append(
+        {
+            "rally": len(prog_list) + 1,
+            "home": ev.home_score,
+            "away": ev.away_score,
+            "score": f"{ev.home_score}-{ev.away_score}",
+            "scorer": winner.value,
+            "side_out": ev.side_out_occurred,
+            "home_rotation": ev.home_rotation.name,
+            "reason": "Árbitro/Corte" if req.is_referee_or_cut else "Punto Manual",
+        }
+    )
     return _serialize_state()
 
 

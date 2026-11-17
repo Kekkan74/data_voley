@@ -578,6 +578,83 @@
       border-color: var(--gold);
     }
 
+    /* EVOLUCIÓN PUNTO A PUNTO DEL MARCADOR (1-0, 2-0, 2-1...) */
+    .progression-set-block {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .progression-set-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 700;
+      font-size: 0.9rem;
+      color: var(--gold);
+    }
+
+    .score-pills-strip {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+
+    .score-step-pill {
+      background: #090e1a;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 8px;
+      display: inline-flex;
+      flex-direction: column;
+      align-items: center;
+      min-width: 62px;
+      transition: transform 0.1s;
+    }
+
+    .score-step-pill.home-pt {
+      border-color: var(--green);
+      background: rgba(16, 185, 129, 0.13);
+    }
+
+    .score-step-pill.away-pt {
+      border-color: var(--red);
+      background: rgba(239, 68, 68, 0.13);
+    }
+
+    .score-step-pill strong {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 0.92rem;
+      color: #fff;
+    }
+
+    .score-step-pill.home-pt strong {
+      color: #34d399;
+    }
+
+    .score-step-pill.away-pt strong {
+      color: #f87171;
+    }
+
+    .score-step-pill span.why {
+      font-size: 0.65rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .progression-chart-svg {
+      width: 100%;
+      height: 110px;
+      background: #080c16;
+      border-radius: 6px;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
     .legend-simple {
       display: flex;
       gap: 16px;
@@ -922,6 +999,18 @@
           <span class="card-subtitle" id="setter-info-text">Rota automáticamente al recuperar el saque</span>
         </div>
         <div class="rot-grid" id="rot-grid"></div>
+      </div>
+
+      <!-- 5. EVOLUCIÓN PUNTO A PUNTO DEL MARCADOR (0-0 -> 1-0 -> 2-0 -> ...) -->
+      <div class="card">
+        <div class="card-title">
+          <span id="title-score-progression">📈 Evolución del Marcador Punto a Punto (1-0, 2-0, 2-1...)</span>
+          <div class="legend-simple" style="padding:0;">
+            <span><i class="dot-swatch" style="background:var(--green)"></i>Punto Mi Equipo</span>
+            <span><i class="dot-swatch" style="background:var(--red)"></i>Punto Rival</span>
+          </div>
+        </div>
+        <div id="score-progression-container" style="display:flex; flex-direction:column; gap:12px;"></div>
       </div>
 
     </div>
@@ -1396,6 +1485,74 @@
           <text x="${pos.cx}" y="${pos.cy + 4}" fill="${txtColor}" font-size="9" font-weight="bold" text-anchor="middle">${roleEs}</text>
         `;
         playersLayer.appendChild(g);
+      });
+
+      // 8. Renderizar Evolución Punto a Punto del Marcador (1-0, 2-0, 2-1...)
+      document.getElementById('title-score-progression').textContent =
+        `📈 Evolución del Marcador Punto a Punto (${scopeTitle})`;
+
+      const progContainer = document.getElementById('score-progression-container');
+      progContainer.innerHTML = '';
+
+      const setsToShow = scope === 'ALL' ? state.available_sets.map(String) : [scope];
+      setsToShow.forEach((sKey) => {
+        const pointsList = (state.score_progression && state.score_progression[sKey]) || [];
+        const sb = state.set_scoreboards[sKey] || { HOME: 0, AWAY: 0, target_pts: 25 };
+
+        const block = document.createElement('div');
+        block.className = 'progression-set-block';
+
+        // Construir curva SVG de evolución del marcador (Mi Equipo vs Rival)
+        const maxPts = Math.max(sb.target_pts || 25, sb.HOME || 1, sb.AWAY || 1);
+        const totalRallies = Math.max(1, pointsList.length);
+        const svgW = 800;
+        const svgH = 100;
+        const padX = 24;
+        const padY = 14;
+
+        let homePath = `M ${padX} ${svgH - padY}`;
+        let awayPath = `M ${padX} ${svgH - padY}`;
+
+        pointsList.forEach((pt, idx) => {
+          const x = padX + ((idx + 1) / totalRallies) * (svgW - padX * 2);
+          const yh = (svgH - padY) - (pt.home / maxPts) * (svgH - padY * 2);
+          const ya = (svgH - padY) - (pt.away / maxPts) * (svgH - padY * 2);
+          homePath += ` L ${x.toFixed(1)} ${yh.toFixed(1)}`;
+          awayPath += ` L ${x.toFixed(1)} ${ya.toFixed(1)}`;
+        });
+
+        let pillsHtml = `
+          <div class="score-step-pill" style="opacity:0.7;">
+            <strong>0-0</strong>
+            <span class="why">Inicio S${sKey}</span>
+          </div>
+        `;
+
+        pointsList.forEach((pt) => {
+          const cls = pt.scorer === 'HOME' ? 'home-pt' : 'away-pt';
+          const rotTag = pt.side_out ? ` 🔄${pt.home_rotation}` : '';
+          pillsHtml += `
+            <div class="score-step-pill ${cls}" title="Jugada #${pt.rally}: ${pt.reason}${rotTag}">
+              <strong>${pt.score}</strong>
+              <span class="why">${pt.reason}${rotTag}</span>
+            </div>
+          `;
+        });
+
+        block.innerHTML = `
+          <div class="progression-set-header">
+            <span>🏐 Set ${sKey} — Evolución desde 0-0 hasta ${sb.HOME}-${sb.AWAY} (${pointsList.length} puntos jugados)</span>
+            <span style="color:#fff; font-size:0.82rem;">Final: <strong style="color:var(--gold)">${sb.HOME} - ${sb.AWAY}</strong></span>
+          </div>
+          <svg class="progression-chart-svg" viewBox="0 0 ${svgW} ${svgH}" preserveAspectRatio="none">
+            <line x1="${padX}" y1="${svgH - padY}" x2="${svgW - padX}" y2="${svgH - padY}" stroke="#1e293b" stroke-width="1" />
+            <line x1="${padX}" y1="${padY}" x2="${svgW - padX}" y2="${padY}" stroke="#1e293b" stroke-width="1" stroke-dasharray="4,4" />
+            <path d="${awayPath}" fill="none" stroke="#ef4444" stroke-width="2.2" />
+            <path d="${homePath}" fill="none" stroke="#10b981" stroke-width="2.6" />
+          </svg>
+          <div class="score-pills-strip">${pillsHtml}</div>
+        `;
+        progContainer.appendChild(block);
       });
     }
 

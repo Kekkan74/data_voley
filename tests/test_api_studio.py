@@ -144,3 +144,29 @@ def test_rotation_override_and_hybrid_hotkey_tagging() -> None:
 
     tagged = process_hybrid_tag(HybridDecisionRequest(hotkey="v"))
     assert len(tagged["recent_attacks"]) > 0
+
+
+def test_point_by_point_score_progression_by_set() -> None:
+    """Verify each set records the point-by-point running score (1-0, 2-0, 2-1... up to final score)."""
+    state = reset_studio()
+    prog = state["score_progression"]
+
+    assert "1" in prog and "2" in prog and "3" in prog
+    s1_prog = prog["1"]
+
+    # Set 1 is 25-21 -> 46 total rallies
+    assert len(s1_prog) == 46
+    assert s1_prog[0]["rally"] == 1
+    assert s1_prog[0]["home"] + s1_prog[0]["away"] == 1
+    assert s1_prog[-1]["home"] == 25
+    assert s1_prog[-1]["away"] == 21
+    assert s1_prog[-1]["score"] == "25-21"
+
+    # Verify every consecutive step increments either home or away by exactly 1
+    prev_h, prev_a = 0, 0
+    for step in s1_prog:
+        dh = step["home"] - prev_h
+        da = step["away"] - prev_a
+        assert (dh == 1 and da == 0) or (dh == 0 and da == 1)
+        prev_h, prev_a = step["home"], step["away"]
+
