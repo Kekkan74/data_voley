@@ -616,6 +616,11 @@ class StudioSession:
                         ]
                     )
                 )
+                set_qual = (
+                    SetQuality.SUCCESSFUL
+                    if is_in
+                    else (SetQuality.FAULT if idx % 11 == 0 else SetQuality.IMPRECISE)
+                )
                 self.k1_sequences.append(
                     RallyK1Sequence(
                         set_number=s_num,
@@ -629,9 +634,7 @@ class StudioSession:
                             setter_origin_xy=r_target,
                             target_zone=t_zone,
                             tempo=tempo,
-                            quality=(
-                                SetQuality.SUCCESSFUL if is_in else SetQuality.IMPRECISE
-                            ),
+                            quality=set_qual,
                         ),
                         attack=K1AttackEvent(
                             origin_zone=t_zone,
@@ -639,7 +642,7 @@ class StudioSession:
                             blockers_faced=blockers,
                             outcome=outcome,
                         ),
-                        timestamp_sec=float(s_num * 900 + idx * 25),
+                        timestamp_sec=float((s_num - 1) * 1100 + idx * 38 + 45),
                     )
                 )
 
@@ -959,7 +962,9 @@ def _serialize_state() -> Dict[str, Any]:
         "trajectories": filtered_trajectories,
         "recent_attacks": filtered_attacks,
         "k1_stats": compute_k1_advanced_analytics(
-            SESSION.k1_sequences, set_number=set_filter
+            SESSION.k1_sequences,
+            set_number=set_filter,
+            video_start_offset_sec=SESSION.start_offset_seconds,
         ),
         "rotation_faults": [f.model_dump() for f in SESSION.tactical.rotation_faults],
         "last_set_boundary": SESSION.last_set_boundary,
@@ -1130,7 +1135,11 @@ def process_hybrid_tag(req: HybridDecisionRequest) -> Dict[str, Any]:
 
 @app.get("/api/stats/k1-advanced")
 def get_k1_advanced_stats(set_number: Optional[int] = None) -> Dict[str, Any]:
-    return compute_k1_advanced_analytics(SESSION.k1_sequences, set_number=set_number)
+    return compute_k1_advanced_analytics(
+        SESSION.k1_sequences,
+        set_number=set_number,
+        video_start_offset_sec=SESSION.start_offset_seconds,
+    )
 
 
 @app.post("/api/rallies/k1")

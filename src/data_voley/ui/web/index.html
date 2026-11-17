@@ -1012,6 +1012,16 @@
           </div>
         </div>
         <div class="visual-bars" id="chart-settings"></div>
+        <div class="charts-two-col" style="margin-top:12px; gap:10px;">
+          <div style="background:rgba(16,185,129,0.08); border:1px solid rgba(16,185,129,0.35); border-radius:8px; padding:10px;">
+            <div style="font-size:0.8rem; font-weight:700; color:#34d399; margin-bottom:6px;">🏆 Mejores Colocaciones (Minuto para ver)</div>
+            <div id="best-settings-timestamps" style="display:flex; flex-direction:column; gap:5px; font-size:0.75rem;"></div>
+          </div>
+          <div style="background:rgba(239,68,68,0.08); border:1px solid rgba(239,68,68,0.35); border-radius:8px; padding:10px;">
+            <div style="font-size:0.8rem; font-weight:700; color:#f87171; margin-bottom:6px;">⚠️ Peores Colocaciones (Minuto para ver)</div>
+            <div id="worst-settings-timestamps" style="display:flex; flex-direction:column; gap:5px; font-size:0.75rem;"></div>
+          </div>
+        </div>
         <div class="legend-simple">
           <span><i class="dot-swatch" style="background:var(--green)"></i>Exitosa: Asistencia de Punto</span>
           <span><i class="dot-swatch" style="background:var(--cyan)"></i>Exitosa: Pase Bueno en Juego</span>
@@ -1804,6 +1814,32 @@
       if (!k1) return;
 
       // 1. Distribución del Colocador (En Sistema vs Fuera de Sistema)
+      const bw = k1.best_and_worst_settings;
+      if (bw) {
+        const bestBox = document.getElementById('best-settings-timestamps');
+        const worstBox = document.getElementById('worst-settings-timestamps');
+        if (bestBox) {
+          bestBox.innerHTML = bw.best_settings.length
+            ? bw.best_settings.map(s => `
+                <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:3px;">
+                  <span><strong>Set ${s.set_number}</strong> • ⏱️ <strong style="color:var(--gold)">${s.video_time_mmss}</strong> <span style="color:var(--muted)">(partido ${s.match_time_mmss})</span></span>
+                  <span style="color:#a7f3d0;">${s.reason}</span>
+                </div>
+              `).join('')
+            : '<span style="color:var(--muted)">Sin asistencias registradas en este ámbito</span>';
+        }
+        if (worstBox) {
+          worstBox.innerHTML = bw.worst_settings.length
+            ? bw.worst_settings.map(s => `
+                <div style="display:flex; justify-content:space-between; gap:6px; border-bottom:1px solid rgba(255,255,255,0.06); padding-bottom:3px;">
+                  <span><strong>Set ${s.set_number}</strong> • ⏱️ <strong style="color:var(--gold)">${s.video_time_mmss}</strong> <span style="color:var(--muted)">(partido ${s.match_time_mmss})</span></span>
+                  <span style="color:#fecaca;">${s.reason}</span>
+                </div>
+              `).join('')
+            : '<span style="color:var(--muted)">Sin colocaciones falladas en este ámbito</span>';
+        }
+      }
+
       const setter = k1.setter_distribution;
       document.getElementById('setter-advantage-badge').textContent =
         `Ventaja Colocador (<=1 bloq): ${setter.setter_advantage_rate_pct}%`;

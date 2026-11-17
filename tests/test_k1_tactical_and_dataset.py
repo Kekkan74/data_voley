@@ -343,3 +343,78 @@ def test_fastapi_k1_endpoints_register_and_query(tmp_path: Path) -> None:
     adv = get_k1_advanced_stats(set_number=1)
     assert adv["setter_distribution"]["in_system"]["total"] >= 1
     assert adv["attack_efficiency"]["total_attacks"] >= 1
+
+
+def test_best_and_worst_settings_include_set_and_video_minutes() -> None:
+    """Verify best and worst settings are detected with exact MM:SS match & video timestamps."""
+    from data_voley.domain.enums import Rotation
+    from data_voley.stats_engine.analytics import compute_k1_advanced_analytics
+    from data_voley.tactical_state.k1_models import (
+        K1AttackEvent,
+        K1AttackOutcome,
+        RallyK1Sequence,
+        ReceptionEvent,
+        SetEvent,
+        SetQuality,
+        SetTempo,
+    )
+
+    sequences = [
+        # Best setting in Set 1 at 185s (03:05) -> Z3 1st tempo, 0 blockers, Kill (#)
+        RallyK1Sequence(
+            set_number=1,
+            rotation=Rotation.R1,
+            timestamp_sec=185.0,
+            reception=ReceptionEvent(
+                receptor_zone=5, origin_xy=(1.5, 2.5), target_xy=(6.0, 8.5)
+            ),
+            setting=SetEvent(
+                setter_origin_xy=(6.0, 8.5),
+                target_zone=3,
+                tempo=SetTempo.FIRST,
+                quality=SetQuality.SUCCESSFUL,
+            ),
+            attack=K1AttackEvent(
+                origin_zone=3, target_xy=(4.5, 15.0), blockers_faced=0, outcome=K1AttackOutcome.KILL
+            ),
+        ),
+        # Worst setting in Set 2 at 1245s (20:45) -> FAULT / Imprecise blocked
+        RallyK1Sequence(
+            set_number=2,
+            rotation=Rotation.R4,
+            timestamp_sec=1245.0,
+            reception=ReceptionEvent(
+                receptor_zone=6, origin_xy=(4.5, 2.5), target_xy=(2.0, 4.0)
+            ),
+            setting=SetEvent(
+                setter_origin_xy=(2.0, 4.0),
+                target_zone=4,
+                tempo=SetTempo.THIRD,
+                quality=SetQuality.FAULT,
+            ),
+            attack=K1AttackEvent(
+                origin_zone=4, target_xy=(1.2, 14.0), blockers_faced=3, outcome=K1AttackOutcome.BLOCKED
+            ),
+        ),
+    ]
+
+    # Suppose video started at 10:00 (600s offset)
+    res = compute_k1_advanced_analytics(
+        sequences, set_number=None, video_start_offset_sec=600.0
+    )
+    bw = res["best_and_worst_settings"]
+    assert len(bw["best_settings"]) >= 1
+    assert len(bw["worst_settings"]) >= 1
+
+    best = bw["best_settings"][0]
+    assert best["set_number"] == 1
+    assert best["target_zone"] == "Z3"
+    assert best["match_time_mmss"] == "03:05"
+    assert best["video_time_mmss"] == "13:05"
+
+    worst = bw["worst_settings"][0]
+    assert worst["set_number"] == 2
+    assert worst["target_zone"] == "Z4"
+    assert worst["match_time_mmss"] == "20:45"
+    assert worst["video_time_mmss"] == "30:45"
+

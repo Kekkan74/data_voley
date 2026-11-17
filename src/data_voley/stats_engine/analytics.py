@@ -26,6 +26,7 @@ from data_voley.tactical_state.k1_models import (
     K1AttackOutcome,
     RallyK1Sequence,
     ReceptionQuality,
+    SetQuality,
     SetTempo,
 )
 
@@ -685,10 +686,113 @@ def compute_attack_efficiency_and_directions(
     }
 
 
-def compute_k1_advanced_analytics(
-    sequences: Sequence[RallyK1Sequence], set_number: Optional[int] = None
+def format_mm_ss(seconds: float) -> str:
+    """Format seconds into MM:SS (or H:MM:SS when >= 3600s)."""
+    total = max(0, int(round(seconds)))
+    hrs, rem = divmod(total, 3600)
+    mins, secs = divmod(rem, 60)
+    if hrs > 0:
+        return f"{hrs}:{mins:02d}:{secs:02d}"
+    return f"{mins:02d}:{secs:02d}"
+
+
+def compute_best_and_worst_settings_with_timestamps(
+    sequences: Sequence[RallyK1Sequence],
+    set_number: Optional[int] = None,
+    video_start_offset_sec: float = 0.0,
+    limit: int = 5,
 ) -> Dict[str, Any]:
-    """Return all K1/K2 advanced metrics (Setter, Reception/Side-Out, Attack)."""
+    """
+    Detect the best and worst setting actions with exact match & video timestamps (MM:SS)
+    per set or across the entire match so the analyst can jump straight to the clip.
+    """
+    filtered = [s for s in _filter_k1_sequences(sequences, set_number) if s.setting is not None]
+
+    scored_best: List[Tuple[int, Dict[str, Any]]] = []
+    scored_worst: List[Tuple[int, Dict[str, Any]]] = []
+
+    for seq in filtered:
+        st = seq.setting
+        assert st is not None
+        atk = seq.attack
+        match_sec = max(0.0, float(seq.timestamp_sec))
+        video_sec = max(0.0, float(video_start_offset_sec) + match_sec)
+
+        entry: Dict[str, Any] = {
+            "set_number": seq.set_number,
+            "rotation": seq.rotation.name,
+            "target_zone": f"Z{st.target_zone}",
+            "tempo": st.tempo.value,
+            "set_quality": st.quality.value,
+            "attack_outcome": atk.outcome.value if atk else "-",
+            "blockers_faced": atk.blockers_faced if atk else 0,
+            "match_time_sec": round(match_sec, 1),
+            "match_time_mmss": format_mm_ss(match_sec),
+            "video_time_sec": round(video_sec, 1),
+            "video_time_mmss": format_mm_ss(video_sec),
+            "reason": "",
+        }
+
+        # Score Best Settings
+        if st.quality == SetQuality.SUCCESSFUL and (
+            (atk is not None and atk.outcome == K1AttackOutcome.KILL)
+            or st.tempo == SetTempo.DUMP
+        ):
+            pts = 100
+            if atk is not None:
+                pts += max(0, (2 - atk.blockers_faced)) * 20
+            if st.tempo == SetTempo.FIRST:
+                pts += 10
+            blk_txt = f"{atk.blockers_faced} bloq" if atk else "Finta 2º toque"
+            entry_best = {
+                **entry,
+                "reason": f"Asistencia perfecta a Z{st.target_zone} ({st.tempo.value}, {blk_txt})",
+            }
+            scored_best.append((pts, entry_best))
+
+        # Score Worst Settings
+        is_worst = False
+        w_pts = 0
+        w_reason = ""
+        if st.quality == SetQuality.FAULT:
+            is_worst = True
+            w_pts = 120
+            w_reason = f"Falta/Error de colocación hacia Z{st.target_zone}"
+        elif st.quality == SetQuality.IMPRECISE or (
+            atk is not None
+            and atk.outcome in (K1AttackOutcome.BLOCKED, K1AttackOutcome.ERROR)
+        ):
+            is_worst = True
+            w_pts = 60
+            if st.quality == SetQuality.IMPRECISE:
+                w_pts += 25
+            if atk is not None and atk.outcome == K1AttackOutcome.BLOCKED:
+                w_pts += 30
+                w_reason = f"Colocación cerrada/previsible -> Bloqueado (/) en Z{st.target_zone} ({atk.blockers_faced} bloq)"
+            elif atk is not None and atk.outcome == K1AttackOutcome.ERROR:
+                w_pts += 20
+                w_reason = f"Colocación imprecisa -> Error de ataque (=) en Z{st.target_zone}"
+            else:
+                w_reason = f"Colocación imprecisa hacia Z{st.target_zone} ({st.tempo.value})"
+
+        if is_worst:
+            scored_worst.append((w_pts, {**entry, "reason": w_reason}))
+
+    scored_best.sort(key=lambda x: (-x[0], x[1]["set_number"], x[1]["match_time_sec"]))
+    scored_worst.sort(key=lambda x: (-x[0], x[1]["set_number"], x[1]["match_time_sec"]))
+
+    return {
+        "best_settings": [item for _, item in scored_best[:limit]],
+        "worst_settings": [item for _, item in scored_worst[:limit]],
+    }
+
+
+def compute_k1_advanced_analytics(
+    sequences: Sequence[RallyK1Sequence],
+    set_number: Optional[int] = None,
+    video_start_offset_sec: float = 0.0,
+) -> Dict[str, Any]:
+    """Return all K1/K2 advanced metrics (Setter, Reception/Side-Out, Attack, and Setting Timestamps)."""
     return {
         "set_filter": set_number,
         "total_k1_rallies": len(_filter_k1_sequences(sequences, set_number)),
@@ -698,5 +802,10 @@ def compute_k1_advanced_analytics(
         ),
         "attack_efficiency": compute_attack_efficiency_and_directions(
             sequences, set_number=set_number
+        ),
+        "best_and_worst_settings": compute_best_and_worst_settings_with_timestamps(
+            sequences,
+            set_number=set_number,
+            video_start_offset_sec=video_start_offset_sec,
         ),
     }
