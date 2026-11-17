@@ -36,6 +36,10 @@ from data_voley.domain import (
 from data_voley.stats_engine import MatchStatsEngine
 from data_voley.stats_engine.analytics import compute_k1_advanced_analytics
 from data_voley.tactical_state import TacticalState
+from data_voley.tactical_state.set_boundary import (
+    SetBoundaryDetector,
+    SetBoundarySignal,
+)
 from data_voley.tactical_state.k1_models import (
     K1AttackEvent,
     K1AttackOutcome,
@@ -122,10 +126,13 @@ class StudioSession:
             away_initial_rotation=Rotation.R4,
             initial_server=TeamSide.HOME,
             max_sets=3,
+            play_all_sets=True,
         )
         self.stats = MatchStatsEngine(tactical_port=self.tactical)
         self.detector = ActionDetector(court_mapper=self.mapper)
         self.hybrid = HybridTaggingController(stats_engine=self.stats)
+        self.set_boundary_detector = SetBoundaryDetector()
+        self.last_set_boundary: Optional[Dict[str, Any]] = None
         self.trajectories: List[Dict[str, Any]] = []
         self.set_scoreboards: Dict[int, Dict[str, Any]] = {}
         self.score_progression_by_set: Dict[int, List[Dict[str, Any]]] = {}
@@ -202,38 +209,62 @@ class StudioSession:
 
     @staticmethod
     def _build_realistic_point_sequence(
-        h_target: int, a_target: int, target_limit: int, rng: random.Random
+        h_target: int,
+        a_target: int,
+        target_limit: int,
+        rng: random.Random,
+        initial_run_home: int = 0,
+        initial_run_away: int = 0,
     ) -> List[TeamSide]:
         """
-        Construct a realistic rally-by-rally winner sequence that ends at (h_target, a_target)
-        and guarantees the set winner scores the clinching final point(s).
+        Construct a realistic rally-by-rally winner sequence that ends at (h_target, a_target),
+        guarantees the set winner scores the clinching final point(s), and preserves
+        unilateral opening runs (e.g., 7-0 before the opponent scores).
         """
         if h_target == 0 and a_target == 0:
             return []
 
-        if h_target > a_target:
-            if h_target > target_limit and a_target >= target_limit - 1:
-                # Deuce set won by HOME: tie at (a_target, a_target) then 2 HOME points
-                pool = [TeamSide.HOME] * a_target + [TeamSide.AWAY] * a_target
-                rng.shuffle(pool)
-                return pool + [TeamSide.HOME] * (h_target - a_target)
-            pool = [TeamSide.HOME] * (h_target - 1) + [TeamSide.AWAY] * a_target
-            rng.shuffle(pool)
-            return pool + [TeamSide.HOME]
+        prefix: List[TeamSide] = []
+        rem_h = h_target
+        rem_a = a_target
 
-        if a_target > h_target:
-            if a_target > target_limit and h_target >= target_limit - 1:
-                # Deuce set won by AWAY: tie at (h_target, h_target) then 2 AWAY points
-                pool = [TeamSide.HOME] * h_target + [TeamSide.AWAY] * h_target
-                rng.shuffle(pool)
-                return pool + [TeamSide.AWAY] * (a_target - h_target)
-            pool = [TeamSide.HOME] * h_target + [TeamSide.AWAY] * (a_target - 1)
-            rng.shuffle(pool)
-            return pool + [TeamSide.AWAY]
+        if initial_run_home > 0 and rem_h >= initial_run_home:
+            run_h = min(initial_run_home, rem_h if rem_a > 0 else rem_h)
+            prefix.extend([TeamSide.HOME] * run_h)
+            rem_h -= run_h
+        elif initial_run_away > 0 and rem_a >= initial_run_away:
+            run_a = min(initial_run_away, rem_a if rem_h > 0 else rem_a)
+            prefix.extend([TeamSide.AWAY] * run_a)
+            rem_a -= run_a
 
-        pool = [TeamSide.HOME] * h_target + [TeamSide.AWAY] * a_target
+        if rem_h == 0 and rem_a == 0:
+            return prefix
+
+        if h_target > a_target and rem_h > 0:
+            if h_target > target_limit and a_target >= target_limit - 1 and rem_h > rem_a:
+                deuce_tail = h_target - a_target
+                pool_h = max(0, rem_h - deuce_tail)
+                pool = [TeamSide.HOME] * pool_h + [TeamSide.AWAY] * rem_a
+                rng.shuffle(pool)
+                return prefix + pool + [TeamSide.HOME] * deuce_tail
+            pool = [TeamSide.HOME] * (rem_h - 1) + [TeamSide.AWAY] * rem_a
+            rng.shuffle(pool)
+            return prefix + pool + [TeamSide.HOME]
+
+        if a_target > h_target and rem_a > 0:
+            if a_target > target_limit and h_target >= target_limit - 1 and rem_a > rem_h:
+                deuce_tail = a_target - h_target
+                pool_a = max(0, rem_a - deuce_tail)
+                pool = [TeamSide.HOME] * rem_h + [TeamSide.AWAY] * pool_a
+                rng.shuffle(pool)
+                return prefix + pool + [TeamSide.AWAY] * deuce_tail
+            pool = [TeamSide.HOME] * rem_h + [TeamSide.AWAY] * (rem_a - 1)
+            rng.shuffle(pool)
+            return prefix + pool + [TeamSide.AWAY]
+
+        pool = [TeamSide.HOME] * rem_h + [TeamSide.AWAY] * rem_a
         rng.shuffle(pool)
-        return pool
+        return prefix + pool
 
     def seed_initial_data(
         self,
@@ -255,6 +286,7 @@ class StudioSession:
             away_initial_rotation=Rotation.R4,
             initial_server=initial_server,
             max_sets=self.max_sets,
+            play_all_sets=(self.max_sets == 3),
         )
         self.stats = MatchStatsEngine(tactical_port=self.tactical)
         self.hybrid = HybridTaggingController(stats_engine=self.stats)
@@ -303,7 +335,7 @@ class StudioSession:
 
         home_sets_won = 0
         away_sets_won = 0
-        sets_needed = (self.max_sets // 2) + 1
+        sets_needed = 3 if self.max_sets == 3 else (self.max_sets // 2) + 1
 
         for s_info in valid_sets[: self.max_sets]:
             s_num = int(s_info["set_num"])
@@ -317,7 +349,12 @@ class StudioSession:
 
             # Build realistic point sequence ending at (h_target, a_target)
             point_winners: List[TeamSide] = self._build_realistic_point_sequence(
-                h_target, a_target, target_limit, rng
+                h_target,
+                a_target,
+                target_limit,
+                rng,
+                initial_run_home=int(s_info.get("initial_run_home", 0)),
+                initial_run_away=int(s_info.get("initial_run_away", 0)),
             )
             self.score_progression_by_set[s_num] = []
             running_h = 0
@@ -759,6 +796,20 @@ class K1RallyRequest(BaseModel):
     side_out_won: Optional[bool] = None
 
 
+class SetBoundaryRequest(BaseModel):
+    pause_duration_sec: float = 0.0
+    teams_separated_to_benches: bool = False
+    court_sides_swapped: bool = False
+    observed_home_rotation: Optional[int] = None
+    formation_reset_detected: bool = False
+    auto_advance: bool = True
+
+
+class RotationFaultRequest(BaseModel):
+    faulting_team: str = "HOME"
+    actual_rotation: Optional[int] = None
+
+
 def _serialize_state() -> Dict[str, Any]:
     SESSION.sync_active_set_scoreboard()
     h_score, a_score = SESSION.tactical.get_score()
@@ -840,7 +891,7 @@ def _serialize_state() -> Dict[str, Any]:
     recorded_sets = sorted(set(SESSION.stats.get_recorded_sets()) | set(SESSION.set_scoreboards.keys()))
 
     format_description = (
-        "Modo Municipal (Al mejor de 3 sets: Gana con 2 sets • Sets 1-2 a 25 pts, 3º Set a 15 pts)"
+        "Modo Municipal (3 Sets completos: posible 3-0 o 2-1 • Sets 1-2 a 25 pts, 3º Set a 15 pts)"
         if SESSION.max_sets == 3
         else "Modo Oficial (Al mejor de 5 sets: Gana con 3 sets • Sets 1-4 a 25 pts, 5º Set a 15 pts)"
     )
@@ -910,6 +961,8 @@ def _serialize_state() -> Dict[str, Any]:
         "k1_stats": compute_k1_advanced_analytics(
             SESSION.k1_sequences, set_number=set_filter
         ),
+        "rotation_faults": [f.model_dump() for f in SESSION.tactical.rotation_faults],
+        "last_set_boundary": SESSION.last_set_boundary,
         "ai_proposal": SESSION.current_proposal,
         "homography_matrix": SESSION.mapper.homography_matrix.round(4).tolist(),
     }
@@ -1150,6 +1203,59 @@ def register_k1_rally(req: K1RallyRequest) -> Dict[str, Any]:
     state = _serialize_state()
     state["exported_k1_sample"] = exported
     return state
+
+
+@app.post("/api/tactical/rotation-fault")
+def register_rotation_fault_endpoint(req: RotationFaultRequest) -> Dict[str, Any]:
+    team = TeamSide(req.faulting_team.upper())
+    actual_rot = Rotation(int(req.actual_rotation)) if req.actual_rotation is not None else None
+    c_set = SESSION.tactical.current_set
+
+    fault_ev = SESSION.tactical.register_rotation_fault(
+        faulting_team=team,
+        actual_rotation=actual_rot,
+    )
+    prog_list = SESSION.score_progression_by_set.setdefault(c_set, [])
+    prog_list.append(
+        {
+            "rally": len(prog_list) + 1,
+            "home": fault_ev.home_score,
+            "away": fault_ev.away_score,
+            "score": f"{fault_ev.home_score}-{fault_ev.away_score}",
+            "scorer": fault_ev.awarded_to.value,
+            "side_out": True,
+            "home_rotation": SESSION.tactical.get_rotation(TeamSide.HOME).name,
+            "reason": f"Falta de Rotación ({team.value} -> {fault_ev.resynced_rotation.name})",
+        }
+    )
+    return _serialize_state()
+
+
+@app.post("/api/sets/detect-boundary")
+def detect_set_boundary_endpoint(req: SetBoundaryRequest) -> Dict[str, Any]:
+    obs_rot = (
+        Rotation(int(req.observed_home_rotation))
+        if req.observed_home_rotation is not None
+        else None
+    )
+    sig = SetBoundarySignal(
+        current_score=SESSION.tactical.get_score(),
+        pause_duration_sec=req.pause_duration_sec,
+        teams_separated_to_benches=req.teams_separated_to_benches,
+        court_sides_swapped=req.court_sides_swapped,
+        expected_home_rotation=SESSION.tactical.get_rotation(TeamSide.HOME),
+        observed_home_rotation=obs_rot,
+        formation_reset_detected=req.formation_reset_detected,
+    )
+    result = SESSION.set_boundary_detector.evaluate(sig)
+    SESSION.last_set_boundary = result.model_dump()
+
+    if result.is_new_set and req.auto_advance:
+        new_set = SESSION.tactical.advance_to_next_set(home_new_rotation=obs_rot)
+        SESSION.score_progression_by_set.setdefault(new_set, [])
+        SESSION.active_scope = str(new_set)
+
+    return _serialize_state()
 
 
 @app.post("/api/reset")

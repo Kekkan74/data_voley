@@ -9,8 +9,23 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
+from pydantic import BaseModel
+
 from data_voley.domain.enums import CourtZone, PlayerRole, Rotation, TeamSide
 from data_voley.domain.models import RallyTransitionEvent, RotationFormationSnapshot
+
+
+class RotationFaultEvent(BaseModel):
+    """Domain record emitted when a rotation/position fault is sanctioned."""
+
+    set_number: int
+    rally_number: int
+    faulting_team: TeamSide
+    awarded_to: TeamSide
+    previous_rotation: Rotation
+    resynced_rotation: Rotation
+    home_score: int
+    away_score: int
 
 
 class TacticalState:
@@ -53,8 +68,10 @@ class TacticalState:
         away_initial_rotation: Rotation = Rotation.R1,
         initial_server: TeamSide = TeamSide.HOME,
         max_sets: int = 5,
+        play_all_sets: bool = False,
     ) -> None:
         self._max_sets: int = max_sets
+        self._play_all_sets: bool = play_all_sets
         self._current_set: int = 1
         self._rally_counter: int = 0
         self._serving_team: TeamSide = initial_server
@@ -73,6 +90,7 @@ class TacticalState:
             TeamSide.AWAY: 0,
         }
         self._history: List[RallyTransitionEvent] = []
+        self._rotation_faults: List[RotationFaultEvent] = []
 
     @property
     def current_set(self) -> int:
@@ -98,6 +116,11 @@ class TacticalState:
     def history(self) -> List[RallyTransitionEvent]:
         """Return chronological list of rally transition events."""
         return list(self._history)
+
+    @property
+    def rotation_faults(self) -> List[RotationFaultEvent]:
+        """Return chronological list of rotation fault events."""
+        return list(self._rotation_faults)
 
     def get_rotation(self, team: TeamSide) -> Rotation:
         """Return the active tactical rotation (R1-R6) for `team`."""
@@ -151,7 +174,9 @@ class TacticalState:
         # 3. Check Set / Match victory conditions
         set_winner = self._is_set_clinched()
         set_finished = set_winner is not None
-        sets_needed_to_win = (self._max_sets // 2) + 1
+        sets_needed_to_win = (
+            self._max_sets if self._play_all_sets else (self._max_sets // 2) + 1
+        )
 
         active_set_num = self._current_set
         h_score_snapshot = self._score[TeamSide.HOME]
@@ -159,7 +184,10 @@ class TacticalState:
 
         if set_winner is not None:
             self._sets_won[set_winner] += 1
-            if self._sets_won[set_winner] >= sets_needed_to_win:
+            if (
+                self._sets_won[set_winner] >= sets_needed_to_win
+                or self._current_set >= self._max_sets
+            ):
                 self._match_finished = True
             else:
                 self._current_set += 1
@@ -181,6 +209,76 @@ class TacticalState:
         )
         self._history.append(event)
         return event
+
+    def register_rotation_fault(
+        self,
+        faulting_team: TeamSide,
+        actual_rotation: Optional[Rotation] = None,
+    ) -> RotationFaultEvent:
+        """
+        Handle a rotation/position fault committed by `faulting_team`.
+
+        Awards 1 point to the opponent, transfers serve if needed, and
+        resynchronizes `faulting_team` to `actual_rotation` (if provided)
+        so the rest of the set remains tactically consistent.
+        """
+        if self._match_finished:
+            self._match_finished = False
+
+        prev_rot = self._rotations[faulting_team]
+        awarded_to = faulting_team.opponent()
+        active_set = self._current_set
+
+        self.register_rally_point(winner=awarded_to)
+        if actual_rotation is not None:
+            self._rotations[faulting_team] = actual_rotation
+
+        h_now, a_now = self.get_score()
+        fault_ev = RotationFaultEvent(
+            set_number=active_set,
+            rally_number=self._rally_counter,
+            faulting_team=faulting_team,
+            awarded_to=awarded_to,
+            previous_rotation=prev_rot,
+            resynced_rotation=self._rotations[faulting_team],
+            home_score=h_now,
+            away_score=a_now,
+        )
+        self._rotation_faults.append(fault_ev)
+        return fault_ev
+
+    def advance_to_next_set(
+        self,
+        winner: Optional[TeamSide] = None,
+        home_new_rotation: Optional[Rotation] = None,
+        away_new_rotation: Optional[Rotation] = None,
+        initial_server: Optional[TeamSide] = None,
+    ) -> int:
+        """
+        Advance to the next set when a SetBoundarySignal confirms a set change
+        (even if video cuts prevented reaching 25/15 points).
+        """
+        if winner is None:
+            h_pts, a_pts = self.get_score()
+            if h_pts != a_pts:
+                winner = TeamSide.HOME if h_pts > a_pts else TeamSide.AWAY
+        if winner is not None:
+            self._sets_won[winner] += 1
+
+        if self._current_set < self._max_sets:
+            self._current_set += 1
+            self._score = {TeamSide.HOME: 0, TeamSide.AWAY: 0}
+        else:
+            self._match_finished = True
+
+        if home_new_rotation is not None:
+            self._rotations[TeamSide.HOME] = home_new_rotation
+        if away_new_rotation is not None:
+            self._rotations[TeamSide.AWAY] = away_new_rotation
+        if initial_server is not None:
+            self._serving_team = initial_server
+
+        return self._current_set
 
     def infer_formation(
         self, team: TeamSide, use_libero_in_back_row: bool = True
