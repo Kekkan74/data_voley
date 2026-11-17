@@ -8,11 +8,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from data_voley.api.server import (
+    ConnectStreamRequest,
     CourtClickRequest,
     HybridDecisionRequest,
     RallyRequest,
     RotationOverrideRequest,
     ScopeFilterRequest,
+    connect_stream_endpoint,
     get_state,
     health_check,
     override_rotation,
@@ -22,6 +24,24 @@ from data_voley.api.server import (
     reset_studio,
     set_analytics_scope,
 )
+
+
+def test_connect_stream_first_step_workflow() -> None:
+    """Verify connecting a stream URL configures team names, initial rotation, and data."""
+    state = connect_stream_endpoint(
+        ConnectStreamRequest(
+            stream_url="https://stream.fivb.org/live/match123.m3u8",
+            home_name="CV Madrid",
+            away_name="Unicaja Almería",
+            initial_rotation=2,
+            initial_server="HOME",
+            auto_analyze=True,
+        )
+    )
+    assert state["match"]["stream_url"] == "https://stream.fivb.org/live/match123.m3u8"
+    assert state["match"]["home_name"] == "CV Madrid"
+    assert state["match"]["away_name"] == "Unicaja Almería"
+    assert len(state["available_sets"]) == 3
 
 
 def test_studio_health_and_initial_seeded_charts() -> None:

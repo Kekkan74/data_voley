@@ -3,25 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DataVoley Studio — Analítica por Set y Partido Completo (FIVB R1-R6)</title>
+  <title>DataVoley — Analizador Visual de Partidos de Voleibol</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <style>
     :root {
-      --bg-arena: #080d18;
-      --bg-panel: #0f172a;
-      --bg-card: #15203b;
-      --border-line: #233554;
-      --mikasa-gold: #f5b700;
-      --mikasa-blue: #2563eb;
-      --teraflex-court: #1e40af;
-      --teraflex-out: #9a3412;
-      --kill-green: #10b981;
-      --inplay-cyan: #06b6d4;
-      --fault-red: #ef4444;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
+      --bg-dark: #090e1a;
+      --bg-panel: #111a2e;
+      --bg-card: #17233d;
+      --border: #263859;
+      --gold: #f5b700;
+      --blue: #2563eb;
+      --green: #10b981;
+      --cyan: #06b6d4;
+      --red: #ef4444;
+      --text: #f8fafc;
+      --muted: #94a3b8;
     }
 
     * {
@@ -31,586 +30,500 @@
     }
 
     body {
-      background-color: var(--bg-arena);
-      color: var(--text-main);
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-dark);
+      color: var(--text);
+      font-family: 'Inter', system-ui, sans-serif;
       min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow-x: hidden;
     }
 
-    /* TOP BROADCAST SCOREBOARD BAR */
-    header.topbar {
-      background: linear-gradient(90deg, #0b1325 0%, #13203d 50%, #0b1325 100%);
-      border-bottom: 2px solid var(--border-line);
-      padding: 10px 22px;
+    /* =========================================================================
+       PANTALLA 1 (LO PRIMERO QUE SE VE): CONECTAR ENLACE DEL PARTIDO
+       ========================================================================= */
+    .welcome-overlay {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(circle at top, #162447 0%, #090e1a 75%);
+      z-index: 1000;
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .welcome-overlay.hidden {
+      display: none;
+    }
+
+    .welcome-card {
+      background: var(--bg-panel);
+      border: 2px solid var(--border);
+      border-radius: 16px;
+      width: 100%;
+      max-width: 640px;
+      padding: 32px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    .welcome-header {
+      display: flex;
+      align-items: center;
       gap: 16px;
     }
 
-    .brand {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .brand-ball {
-      width: 34px;
-      height: 34px;
+    .ball-icon {
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
-      background: conic-gradient(var(--mikasa-gold) 0deg 180deg, var(--mikasa-blue) 180deg 360deg);
-      border: 2px solid #fff;
-      box-shadow: 0 0 12px rgba(245, 183, 0, 0.45);
+      background: conic-gradient(var(--gold) 0deg 180deg, var(--blue) 180deg 360deg);
+      border: 3px solid #fff;
+      flex-shrink: 0;
     }
 
-    .brand h1 {
+    .welcome-header h1 {
       font-family: 'Chakra Petch', sans-serif;
-      font-size: 1.32rem;
-      letter-spacing: 0.5px;
-      color: var(--text-main);
+      font-size: 1.75rem;
+      color: #fff;
     }
 
-    .brand span.sub {
-      display: block;
-      font-size: 0.72rem;
-      color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
+    .welcome-header p {
+      color: var(--muted);
+      font-size: 0.92rem;
+      margin-top: 2px;
     }
 
-    .scoreboard {
+    .step-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
       display: flex;
-      align-items: center;
-      background: #070b14;
-      border: 1px solid var(--border-line);
-      border-radius: 8px;
-      padding: 6px 16px;
-      gap: 18px;
-    }
-
-    .team-box {
-      display: flex;
-      align-items: center;
+      flex-direction: column;
       gap: 10px;
     }
 
-    .team-name {
-      font-family: 'Chakra Petch', sans-serif;
+    .step-title {
       font-weight: 700;
-      font-size: 1.02rem;
-    }
-
-    .serve-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: transparent;
-    }
-
-    .serve-dot.active {
-      background: var(--mikasa-gold);
-      box-shadow: 0 0 8px var(--mikasa-gold);
-    }
-
-    .score-num {
-      font-family: 'Chakra Petch', sans-serif;
-      font-size: 1.7rem;
-      font-weight: 700;
-      color: var(--mikasa-gold);
-      min-width: 34px;
-      text-align: center;
-    }
-
-    .set-badge {
-      background: var(--mikasa-blue);
-      color: #fff;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.76rem;
-      font-weight: 600;
-      padding: 4px 10px;
-      border-radius: 4px;
-    }
-
-    .top-actions {
+      font-size: 0.95rem;
+      color: var(--gold);
       display: flex;
+      justify-content: space-between;
       align-items: center;
+    }
+
+    .input-row {
+      display: flex;
       gap: 8px;
     }
 
-    button.btn {
-      background: var(--bg-card);
-      color: var(--text-main);
-      border: 1px solid var(--border-line);
-      padding: 7px 12px;
-      border-radius: 6px;
-      font-size: 0.8rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, transform 0.1s;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    input.text-input, select.select-input {
+      width: 100%;
+      background: #090e1a;
+      color: #fff;
+      border: 1px solid #3b4f76;
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-family: 'Inter', sans-serif;
     }
 
-    button.btn:hover {
-      background: #1e2f53;
+    input.text-input:focus, select.select-input:focus {
+      outline: none;
+      border-color: var(--gold);
+    }
+
+    .form-grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .field-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    .welcome-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .btn-primary-large {
+      background: var(--gold);
+      color: #090e1a;
+      border: none;
+      border-radius: 10px;
+      padding: 15px 20px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform 0.1s, background 0.15s;
+    }
+
+    .btn-primary-large:hover {
+      background: #ffca28;
+    }
+
+    .btn-secondary-large {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 18px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-secondary-large:hover {
+      background: var(--bg-card);
       border-color: #3b82f6;
     }
 
-    button.btn-gold {
-      background: var(--mikasa-gold);
-      color: #090d16;
-      border-color: var(--mikasa-gold);
-      font-weight: 700;
+    .btn-demo-link {
+      background: rgba(37, 99, 235, 0.2);
+      color: #60a5fa;
+      border: 1px solid #2563eb;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      cursor: pointer;
+      font-weight: 600;
     }
 
-    button.btn-green {
-      background: rgba(16, 185, 129, 0.18);
-      border-color: var(--kill-green);
-      color: #34d399;
-    }
-
-    button.btn-red {
-      background: rgba(239, 68, 68, 0.18);
-      border-color: var(--fault-red);
-      color: #f87171;
-    }
-
-    /* SCOPE FILTER BAR (POR CADA SET vs PARTIDO ENTERO) */
-    .scope-bar {
-      background: #0b1222;
-      border-bottom: 1px solid var(--border-line);
-      padding: 10px 22px;
+    /* =========================================================================
+       PANTALLA 2: DASHBOARD VISUAL SENCILLO Y CLARO
+       ========================================================================= */
+    header.topbar {
+      background: #0d1526;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 14px;
       flex-wrap: wrap;
+      gap: 14px;
     }
 
-    .scope-tabs {
+    .scoreboard-simple {
       display: flex;
       align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
+      gap: 16px;
+      background: #070b14;
+      padding: 8px 20px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
     }
 
-    .scope-tab {
-      background: var(--bg-card);
-      border: 1px solid var(--border-line);
-      color: var(--text-muted);
-      padding: 7px 16px;
-      border-radius: 6px;
-      cursor: pointer;
+    .score-team {
       font-family: 'Chakra Petch', sans-serif;
-      font-size: 0.88rem;
+      font-size: 1.15rem;
       font-weight: 700;
       display: flex;
       align-items: center;
       gap: 8px;
-      transition: all 0.15s;
     }
 
-    .scope-tab:hover {
-      border-color: var(--mikasa-gold);
-      color: var(--text-main);
+    .score-big {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 1.9rem;
+      font-weight: 700;
+      color: var(--gold);
     }
 
-    .scope-tab.active {
-      background: linear-gradient(135deg, rgba(245, 183, 0, 0.25) 0%, rgba(37, 99, 235, 0.25) 100%);
-      border: 2px solid var(--mikasa-gold);
-      color: #ffffff;
-      box-shadow: 0 0 12px rgba(245, 183, 0, 0.25);
-    }
-
-    .scope-tab .score-pill {
-      font-family: 'JetBrains Mono', monospace;
+    .serve-badge {
       font-size: 0.72rem;
-      background: rgba(0, 0, 0, 0.35);
+      background: var(--gold);
+      color: #000;
       padding: 2px 6px;
       border-radius: 4px;
-      color: var(--mikasa-gold);
+      font-weight: 700;
     }
 
-    /* MAIN WORKSPACE GRID */
-    main.workspace {
-      display: grid;
-      grid-template-columns: 410px 1fr;
-      gap: 14px;
-      padding: 14px 22px;
-      flex: 1;
-    }
-
-    .panel {
-      background: var(--bg-panel);
-      border: 1px solid var(--border-line);
-      border-radius: 10px;
-      padding: 13px 15px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-
-    .panel-header {
+    /* BARRA DE PESTAÑAS: PARTIDO ENTERO Y CADA SET */
+    .sets-bar {
+      background: #10192d;
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
-      padding-bottom: 7px;
+      flex-wrap: wrap;
+      gap: 12px;
     }
 
-    .panel-title {
-      font-family: 'Chakra Petch', sans-serif;
-      font-size: 0.94rem;
+    .set-tabs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .set-tab {
+      background: var(--bg-card);
+      color: var(--muted);
+      border: 2px solid var(--border);
+      padding: 9px 18px;
+      border-radius: 8px;
+      font-size: 0.92rem;
       font-weight: 700;
-      color: #e2e8f0;
+      cursor: pointer;
       display: flex;
       align-items: center;
       gap: 8px;
+      transition: all 0.15s;
     }
 
-    .mono-tag {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.71rem;
-      color: var(--inplay-cyan);
-      background: rgba(6, 182, 212, 0.12);
-      padding: 2px 7px;
-      border-radius: 4px;
-      border: 1px solid rgba(6, 182, 212, 0.3);
+    .set-tab:hover {
+      color: #fff;
+      border-color: #60a5fa;
     }
 
-    /* LEFT COLUMN: 2D INTERACTIVE COURT */
-    .court-wrapper {
+    .set-tab.active {
+      background: var(--blue);
+      color: #fff;
+      border-color: var(--gold);
+      box-shadow: 0 4px 14px rgba(37, 99, 235, 0.4);
+    }
+
+    .set-tab span.pill {
+      background: rgba(0, 0, 0, 0.35);
+      padding: 2px 8px;
+      border-radius: 5px;
+      font-size: 0.8rem;
+      color: var(--gold);
+    }
+
+    /* LAYOUT PRINCIPAL DE 2 COLUMNAS CLARAS */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 420px 1fr;
+      gap: 18px;
+      padding: 18px 24px;
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+
+    .card {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      gap: 10px;
+      gap: 14px;
     }
 
-    .court-svg-container {
+    .card-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 10px;
+    }
+
+    .card-subtitle {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    /* REPRODUCTOR DE STREAM */
+    .stream-box {
       width: 100%;
-      max-width: 345px;
+      background: #050811;
+      border: 1px solid var(--border);
       border-radius: 8px;
       overflow: hidden;
-      border: 2px solid #334155;
-      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-      cursor: crosshair;
+      aspect-ratio: 16 / 9;
       position: relative;
-    }
-
-    .court-controls {
-      width: 100%;
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .control-group {
-      background: var(--bg-card);
-      padding: 7px 9px;
-      border-radius: 6px;
-      border: 1px solid var(--border-line);
       display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
-
-    .control-group label {
-      font-size: 0.7rem;
-      color: var(--text-muted);
-    }
-
-    .control-group select {
-      background: #090e1a;
-      color: var(--text-main);
-      border: 1px solid var(--border-line);
-      padding: 4px 7px;
-      border-radius: 4px;
-      font-size: 0.8rem;
-    }
-
-    .homography-readout {
-      width: 100%;
-      background: #080c16;
-      border: 1px solid var(--border-line);
-      border-radius: 6px;
-      padding: 7px 11px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.73rem;
-      color: #cbd5e1;
-      display: flex;
-      justify-content: space-between;
       align-items: center;
+      justify-content: center;
     }
 
-    /* RIGHT COLUMN: DASHBOARD CHARTS */
-    .right-column {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+    .stream-box video, .stream-box iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
     }
 
-    .charts-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
+    .stream-placeholder {
+      padding: 16px;
+      text-align: center;
+      font-size: 0.84rem;
+      color: var(--muted);
     }
 
-    /* SET-BY-SET VS FULL MATCH COMPARISON CARDS */
-    .set-comparison-grid {
+    /* TARJETAS RESUMEN DE SET A SET VS PARTIDO COMPLETO */
+    .summary-cards {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
+      gap: 12px;
     }
 
-    .set-comp-card {
+    .sum-card {
       background: var(--bg-card);
-      border: 1px solid var(--border-line);
-      border-radius: 8px;
-      padding: 10px 12px;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
       cursor: pointer;
       transition: all 0.15s;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
     }
 
-    .set-comp-card:hover {
-      border-color: var(--mikasa-gold);
+    .sum-card:hover {
+      border-color: #60a5fa;
     }
 
-    .set-comp-card.active {
-      border: 2px solid var(--mikasa-gold);
+    .sum-card.active {
+      border-color: var(--gold);
       background: rgba(245, 183, 0, 0.1);
     }
 
-    .set-comp-header {
+    .sum-card-title {
+      font-weight: 700;
+      font-size: 0.92rem;
+      color: var(--gold);
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      font-family: 'Chakra Petch', sans-serif;
-      font-weight: 700;
-      font-size: 0.9rem;
-      color: var(--mikasa-gold);
+      margin-bottom: 8px;
     }
 
-    .set-comp-metrics {
+    .sum-stat-big {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 1.55rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .sum-details {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    /* GRÁFICOS DE BARRAS GRANDES Y FÁCILES DE VER */
+    .charts-two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px;
-      font-size: 0.73rem;
-      font-family: 'JetBrains Mono', monospace;
-      color: #cbd5e1;
+      gap: 16px;
     }
 
-    .mini-bar-bg {
-      height: 8px;
-      background: #080c16;
-      border-radius: 4px;
+    .visual-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .bar-item {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .bar-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.86rem;
+    }
+
+    .bar-header strong {
+      color: #fff;
+    }
+
+    .bar-header span {
+      color: var(--muted);
+    }
+
+    .bar-rail {
+      height: 22px;
+      background: #090e1a;
+      border-radius: 6px;
       overflow: hidden;
       display: flex;
+      border: 1px solid rgba(255, 255, 255, 0.08);
     }
 
-    /* ROTATION SELECTOR STRIP */
-    .rotation-strip {
+    .seg-green { background: var(--green); height: 100%; transition: width 0.3s; }
+    .seg-cyan  { background: var(--cyan);  height: 100%; transition: width 0.3s; }
+    .seg-red   { background: var(--red);   height: 100%; transition: width 0.3s; }
+
+    /* RUEDA DE ROTACIONES R1-R6 */
+    .rot-grid {
       display: grid;
       grid-template-columns: repeat(6, 1fr);
       gap: 8px;
     }
 
-    .rot-pill {
+    .rot-btn {
       background: var(--bg-card);
-      border: 1px solid var(--border-line);
-      border-radius: 6px;
-      padding: 6px 5px;
+      border: 2px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 6px;
       text-align: center;
       cursor: pointer;
-      transition: all 0.15s;
+      color: var(--text);
     }
 
-    .rot-pill:hover {
-      border-color: var(--mikasa-gold);
+    .rot-btn.active {
+      border-color: var(--gold);
+      background: rgba(245, 183, 0, 0.18);
     }
 
-    .rot-pill.active {
-      background: rgba(245, 183, 0, 0.16);
-      border: 2px solid var(--mikasa-gold);
+    .rot-btn strong {
+      display: block;
+      font-size: 1.1rem;
+      color: var(--gold);
     }
 
-    .rot-pill .rot-id {
-      font-family: 'Chakra Petch', sans-serif;
-      font-size: 0.98rem;
-      font-weight: 700;
-      color: var(--mikasa-gold);
-    }
-
-    .rot-pill .rot-sub {
-      font-size: 0.66rem;
-      color: var(--text-muted);
-    }
-
-    /* BAR CHARTS */
-    .chart-rows {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 2px;
-    }
-
-    .chart-row {
-      display: grid;
-      grid-template-columns: 115px 1fr 92px;
-      align-items: center;
-      gap: 10px;
-      font-size: 0.78rem;
-    }
-
-    .chart-label {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .chart-label strong {
-      color: #f1f5f9;
-      font-size: 0.8rem;
-    }
-
-    .chart-label span {
-      font-size: 0.68rem;
-      color: var(--text-muted);
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .bar-track {
-      height: 16px;
-      background: #090e1a;
-      border-radius: 4px;
-      overflow: hidden;
-      display: flex;
-      border: 1px solid rgba(255, 255, 255, 0.06);
-    }
-
-    .bar-seg-kill {
-      background: var(--kill-green);
-      height: 100%;
-      transition: width 0.35s ease;
-    }
-
-    .bar-seg-inplay {
-      background: var(--inplay-cyan);
-      height: 100%;
-      transition: width 0.35s ease;
-    }
-
-    .bar-seg-err {
-      background: var(--fault-red);
-      height: 100%;
-      transition: width 0.35s ease;
-    }
-
-    .chart-metric {
-      text-align: right;
-      font-family: 'JetBrains Mono', monospace;
+    .rot-btn span {
       font-size: 0.74rem;
+      color: var(--muted);
     }
 
-    .legend-row {
+    .btn-small {
+      background: var(--bg-card);
+      color: #fff;
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.84rem;
+      cursor: pointer;
+    }
+
+    .btn-small:hover {
+      border-color: var(--gold);
+    }
+
+    .legend-simple {
       display: flex;
-      gap: 14px;
-      font-size: 0.71rem;
-      color: var(--text-muted);
-      margin-top: 2px;
+      gap: 16px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      padding-top: 4px;
     }
 
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-    }
-
-    .legend-swatch {
+    .dot-swatch {
+      display: inline-block;
       width: 10px;
       height: 10px;
-      border-radius: 2px;
-    }
-
-    /* HYBRID AI TAGGING & LOG PANEL */
-    .bottom-grid {
-      display: grid;
-      grid-template-columns: 360px 1fr;
-      gap: 12px;
-    }
-
-    .ai-proposal-box {
-      background: linear-gradient(135deg, #131f3a 0%, #0d1527 100%);
-      border: 1px solid #3b82f6;
-      border-radius: 8px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .ai-proposal-details {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 5px;
-      font-size: 0.78rem;
-      background: rgba(0, 0, 0, 0.25);
-      padding: 7px 9px;
-      border-radius: 6px;
-    }
-
-    .hotkey-bar {
-      display: flex;
-      gap: 8px;
-    }
-
-    kbd {
-      background: #070b14;
-      border: 1px solid #475569;
-      border-radius: 4px;
-      padding: 1px 5px;
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      color: var(--mikasa-gold);
-    }
-
-    /* EVENTS TABLE */
-    .events-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.76rem;
-    }
-
-    .events-table th {
-      text-align: left;
-      color: var(--text-muted);
-      font-weight: 600;
-      padding: 5px 7px;
-      border-bottom: 1px solid var(--border-line);
-    }
-
-    .events-table td {
-      padding: 5px 7px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      font-family: 'JetBrains Mono', monospace;
-    }
-
-    .badge-kill {
-      color: #34d399;
-      font-weight: 600;
-    }
-
-    .badge-err {
-      color: #f87171;
-      font-weight: 600;
+      border-radius: 3px;
+      margin-right: 5px;
     }
 
     @media (max-width: 1150px) {
-      main.workspace, .charts-grid, .bottom-grid, .set-comparison-grid {
+      .main-grid, .charts-two-col, .summary-cards {
         grid-template-columns: 1fr;
       }
     }
@@ -618,69 +531,168 @@
 </head>
 <body>
 
-  <!-- TOP SCOREBOARD & MATCH CONTROLS -->
+  <!-- =======================================================================
+       PASO 1 (PANTALLA INICIAL): PEGAR EL LINK DEL PARTIDO
+       ======================================================================= -->
+  <div class="welcome-overlay" id="welcome-modal">
+    <div class="welcome-card">
+      <div class="welcome-header">
+        <div class="ball-icon"></div>
+        <div>
+          <h1>DataVoley — Analizador de Partidos</h1>
+          <p>Introduce el enlace del partido para extraer y visualizar todas las estadísticas en gráficos.</p>
+        </div>
+      </div>
+
+      <!-- PASO 1: LINK -->
+      <div class="step-box">
+        <div class="step-title">
+          <span>1. Enlace del Vídeo o Stream del Partido</span>
+          <button type="button" class="btn-demo-link" onclick="fillSampleLink()">
+            Usar enlace de prueba
+          </button>
+        </div>
+        <input
+          type="text"
+          id="input-stream-url"
+          class="text-input"
+          placeholder="Pega aquí tu enlace (YouTube, Twitch, stream .m3u8 o archivo .mp4)..."
+          value="https://stream.fivb.org/live/vnl_final_court1.m3u8"
+        />
+      </div>
+
+      <!-- PASO 2: EQUIPOS Y ROTACIÓN INICIAL -->
+      <div class="step-box">
+        <div class="step-title">
+          <span>2. Equipos y Rotación Inicial (R1 a R6)</span>
+        </div>
+        <div class="form-grid-2">
+          <div>
+            <label class="field-label">Nombre de tu Equipo</label>
+            <input type="text" id="input-home-name" class="text-input" value="Mi Equipo" />
+          </div>
+          <div>
+            <label class="field-label">Nombre del Equipo Rival</label>
+            <input type="text" id="input-away-name" class="text-input" value="Rival" />
+          </div>
+        </div>
+        <div class="form-grid-2" style="margin-top:4px;">
+          <div>
+            <label class="field-label">¿En qué Rotación empieza tu equipo?</label>
+            <select id="input-init-rotation" class="select-input">
+              <option value="1">R1 — Colocador empieza en Zona 1 (Zaguero)</option>
+              <option value="2">R2 — Colocador empieza en Zona 6 (Zaguero)</option>
+              <option value="3">R3 — Colocador empieza en Zona 5 (Zaguero)</option>
+              <option value="4">R4 — Colocador empieza en Zona 4 (Delantero)</option>
+              <option value="5">R5 — Colocador empieza en Zona 3 (Delantero)</option>
+              <option value="6">R6 — Colocador empieza en Zona 2 (Delantero)</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">¿Quién empieza sacando?</label>
+            <select id="input-init-server" class="select-input">
+              <option value="HOME">Saca Mi Equipo</option>
+              <option value="AWAY">Saca el Rival</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTONES DE INICIO -->
+      <div class="welcome-actions">
+        <button type="button" class="btn-primary-large" onclick="startAnalysis(true)">
+          📊 Analizar Enlace y Ver Gráficos por Set y Partido
+        </button>
+        <button type="button" class="btn-secondary-large" onclick="startAnalysis(false)">
+          ⏱️ Empezar con marcador a 0-0 (Anotar yo mismo mientras veo el vídeo)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- =======================================================================
+       CABECERA PRINCIPAL Y MARCADOR
+       ======================================================================= -->
   <header class="topbar">
-    <div class="brand">
-      <div class="brand-ball"></div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div class="ball-icon" style="width:34px; height:34px;"></div>
       <div>
-        <h1>DATA_VOLEY STUDIO</h1>
-        <span class="sub">ANALÍTICA VISUAL POR CADA SET Y PARTIDO COMPLETO • FIVB R1–R6</span>
+        <div style="font-family:'Chakra Petch'; font-weight:700; font-size:1.2rem;">DATA_VOLEY</div>
+        <div style="font-size:0.76rem; color:var(--muted);" id="active-stream-text">Enlace conectado</div>
       </div>
     </div>
 
-    <div class="scoreboard">
-      <div class="team-box">
-        <div class="serve-dot" id="serve-home"></div>
-        <span class="team-name">HOME (LOCAL)</span>
-        <span class="score-num" id="score-home">0</span>
+    <div class="scoreboard-simple">
+      <div class="score-team">
+        <span id="label-home-name">Mi Equipo</span>
+        <span class="serve-badge" id="badge-serve-home">SACA</span>
       </div>
-      <div class="set-badge" id="set-indicator">SET 3 (1 - 1)</div>
-      <div class="team-box">
-        <span class="score-num" id="score-away">0</span>
-        <span class="team-name">AWAY (VISITANTE)</span>
-        <div class="serve-dot" id="serve-away"></div>
+      <span class="score-big" id="score-home">0</span>
+      <div style="text-align:center; padding:0 8px;">
+        <div style="font-size:0.75rem; color:var(--muted);" id="set-title-top">SET 3</div>
+        <div style="font-size:0.85rem; font-weight:700; color:#60a5fa;" id="sets-won-top">Sets: 1 - 1</div>
+      </div>
+      <span class="score-big" id="score-away">0</span>
+      <div class="score-team">
+        <span class="serve-badge" id="badge-serve-away" style="display:none;">SACA</span>
+        <span id="label-away-name">Rival</span>
       </div>
     </div>
 
-    <div class="top-actions">
-      <button class="btn btn-green" onclick="scorePoint('HOME')" title="Atajo: Tecla H">
-        + Punto HOME <kbd>H</kbd>
+    <div style="display:flex; gap:8px;">
+      <button class="btn-small" style="background:rgba(16,185,129,0.2); border-color:var(--green);" onclick="scorePoint('HOME')">
+        +1 Punto Mi Equipo
       </button>
-      <button class="btn btn-red" onclick="scorePoint('AWAY')" title="Atajo: Tecla A">
-        + Punto AWAY <kbd>A</kbd>
+      <button class="btn-small" style="background:rgba(239,68,68,0.2); border-color:var(--red);" onclick="scorePoint('AWAY')">
+        +1 Punto Rival
       </button>
-      <button class="btn" onclick="resetMatch()">
-        Reiniciar Partido Demo
+      <button class="btn-small" style="border-color:var(--gold); color:var(--gold);" onclick="openWelcomeModal()">
+        🔗 Cambiar Enlace de Vídeo
       </button>
     </div>
   </header>
 
-  <!-- SCOPE SELECTOR BAR: POR CADA SET Y POR PARTIDO ENTERO -->
-  <div class="scope-bar">
-    <div style="display:flex; align-items:center; gap:10px;">
-      <span style="font-family:'Chakra Petch'; font-weight:700; font-size:0.86rem; color:var(--mikasa-gold);">
-        FILTRAR GRÁFICOS Y PISTA 2D POR:
-      </span>
-      <div class="scope-tabs" id="scope-tabs"></div>
+  <!-- =======================================================================
+       SELECTOR DE VISTA: PARTIDO ENTERO O CADA SET (SET 1, SET 2, SET 3...)
+       ======================================================================= -->
+  <div class="sets-bar">
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span style="font-weight:700; font-size:0.9rem; color:var(--gold);">VER GRÁFICOS DE:</span>
+      <div class="set-tabs" id="set-tabs"></div>
     </div>
-    <span class="mono-tag" id="active-scope-banner">VISTA ACTIVA: PARTIDO COMPLETO</span>
+    <div style="font-size:0.85rem; color:var(--muted);" id="scope-indicator-label">
+      Mostrando estadísticas de todo el partido
+    </div>
   </div>
 
-  <!-- MAIN COCKPIT -->
-  <main class="workspace">
+  <!-- =======================================================================
+       CONTENIDO PRINCIPAL: IZQUIERDA (VÍDEO + PISTA 2D) | DERECHA (GRÁFICOS)
+       ======================================================================= -->
+  <div class="main-grid">
 
-    <!-- LEFT COLUMN: INTERACTIVE 2D FIVB COURT + HOMOGRAPHY -->
-    <section class="panel">
-      <div class="panel-header">
-        <div class="panel-title">
-          📐 PISTA 2D FIVB & HOMOGRAFÍA (18m × 9m)
+    <!-- COLUMNA IZQUIERDA: VÍDEO DEL LINK + PISTA 2D DE ZONAS Y ROTACIÓN -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- REPRODUCTOR DEL STREAM -->
+      <div class="card">
+        <div class="card-title">
+          <span>📺 Vídeo del Partido</span>
+          <span class="card-subtitle" id="player-status-tag">Stream activo</span>
         </div>
-        <span class="mono-tag" id="court-scope-tag">Todos los Sets</span>
+        <div class="stream-box" id="stream-container">
+          <div class="stream-placeholder">Introduce un enlace para visualizar el stream</div>
+        </div>
       </div>
 
-      <div class="court-wrapper">
-        <div class="court-svg-container">
-          <svg id="court-svg" viewBox="0 0 360 660" width="100%" height="100%" onclick="handleCourtClick(event)">
+      <!-- PISTA 2D INTERACTIVA -->
+      <div class="card">
+        <div class="card-title">
+          <span>🏐 Posición en Pista y Remates (Zonas 1 a 6)</span>
+          <span class="card-subtitle">Haz clic en cualquier zona para añadir un remate</span>
+        </div>
+
+        <div style="display:flex; justify-content:center;">
+          <svg id="court-svg" viewBox="0 0 360 520" width="100%" style="max-width:330px; border-radius:8px; border:2px solid #334155; cursor:pointer;" onclick="handleCourtClick(event)">
             <defs>
               <marker id="arrow-kill" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
@@ -688,230 +700,211 @@
               <marker id="arrow-err" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
                 <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
               </marker>
-              <marker id="arrow-inplay" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
-                <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
-              </marker>
             </defs>
 
-            <!-- Outer Free Zone -->
-            <rect x="0" y="0" width="360" height="660" fill="#7c2d12" />
+            <!-- Fondo exterior naranja Teraflex -->
+            <rect x="0" y="0" width="360" height="520" fill="#7c2d12" />
 
-            <!-- Official 9m x 18m Playing Court -->
-            <rect x="45" y="60" width="270" height="540" fill="#1e40af" stroke="#ffffff" stroke-width="3" />
+            <!-- Pista 9x18m (x: 45..315 [270px], y: 30..490 [460px]) -->
+            <rect x="45" y="30" width="270" height="460" fill="#1e40af" stroke="#fff" stroke-width="3" />
 
-            <!-- Zone Grid Dividers -->
-            <line x1="135" y1="60" x2="135" y2="600" stroke="rgba(255,255,255,0.14)" stroke-width="1" stroke-dasharray="4,4" />
-            <line x1="225" y1="60" x2="225" y2="600" stroke="rgba(255,255,255,0.14)" stroke-width="1" stroke-dasharray="4,4" />
+            <!-- Divisiones de zonas -->
+            <line x1="135" y1="30" x2="135" y2="490" stroke="rgba(255,255,255,0.18)" stroke-dasharray="4,4" />
+            <line x1="225" y1="30" x2="225" y2="490" stroke="rgba(255,255,255,0.18)" stroke-dasharray="4,4" />
 
-            <!-- AWAY 3m Attack Line -->
-            <line x1="45" y1="240" x2="315" y2="240" stroke="#ffffff" stroke-width="2.5" />
+            <!-- Líneas de 3 metros -->
+            <line x1="45" y1="183" x2="315" y2="183" stroke="#fff" stroke-width="2" />
+            <line x1="45" y1="336" x2="315" y2="336" stroke="#fff" stroke-width="2" />
 
-            <!-- HOME 3m Attack Line -->
-            <line x1="45" y1="420" x2="315" y2="420" stroke="#ffffff" stroke-width="2.5" />
+            <!-- RED CENTRAL -->
+            <line x1="30" y1="260" x2="330" y2="260" stroke="#f5b700" stroke-width="4" />
+            <text x="180" y="253" fill="#f5b700" font-size="11" font-weight="bold" text-anchor="middle">RED CENTRAL</text>
 
-            <!-- CENTER NET LINE -->
-            <line x1="30" y1="330" x2="330" y2="330" stroke="#f5b700" stroke-width="4" />
-            <text x="180" y="324" fill="#f5b700" font-size="10" font-family="JetBrains Mono" font-weight="bold" text-anchor="middle">RED / NET (y = 9.0m)</text>
+            <!-- Etiquetas Campo Rival (Arriba) -->
+            <text x="90" y="110" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z1</text>
+            <text x="180" y="110" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z6</text>
+            <text x="270" y="110" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z5</text>
+            <text x="90" y="225" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z2</text>
+            <text x="180" y="225" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z3</text>
+            <text x="270" y="225" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z4</text>
 
-            <!-- AWAY ZONE WATERMARKS -->
-            <text x="90" y="145" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z1</text>
-            <text x="180" y="145" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z6</text>
-            <text x="270" y="145" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z5</text>
-            <text x="90" y="290" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z2</text>
-            <text x="180" y="290" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z3</text>
-            <text x="270" y="290" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z4</text>
+            <!-- Etiquetas Mi Equipo (Abajo) -->
+            <text x="90" y="305" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z4</text>
+            <text x="180" y="305" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z3</text>
+            <text x="270" y="305" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z2</text>
+            <text x="90" y="425" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z5</text>
+            <text x="180" y="425" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z6</text>
+            <text x="270" y="425" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z1</text>
 
-            <!-- HOME ZONE WATERMARKS -->
-            <text x="90" y="385" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z4</text>
-            <text x="180" y="385" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z3</text>
-            <text x="270" y="385" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z2</text>
-            <text x="90" y="520" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z5</text>
-            <text x="180" y="520" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z6</text>
-            <text x="270" y="520" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z1</text>
-
-            <!-- Dynamic Trajectory Vectors Layer -->
+            <!-- Flechas de remates -->
             <g id="trajectories-layer"></g>
 
-            <!-- Dynamic Player Nodes Layer (HOME) -->
+            <!-- Jugadores en pista -->
             <g id="players-layer"></g>
-
-            <!-- Last Clicked Coordinate Marker -->
-            <circle id="click-marker" cx="-50" cy="-50" r="6" fill="#f5b700" stroke="#ffffff" stroke-width="2" />
           </svg>
         </div>
 
-        <div class="court-controls">
-          <div class="control-group">
-            <label>Resultado al hacer Click en Pista</label>
-            <select id="click-outcome">
-              <option value="KILL">Remate Punto (KILL)</option>
-              <option value="IN_PLAY">Remate Defendido (IN_PLAY)</option>
-              <option value="BLOCKED">Remate Bloqueado (BLOCKED)</option>
-              <option value="ERROR_NET">Error en la Red (ERROR_NET)</option>
-              <option value="ERROR_OUT">Error Fuera (ERROR_OUT)</option>
-            </select>
-          </div>
-          <div class="control-group">
-            <label>Zona Destino del Remate</label>
-            <select id="click-target-zone">
-              <option value="5">Hacia Zona 5 (Diagonal Larga)</option>
-              <option value="1">Hacia Zona 1 (Paralela / Línea)</option>
-              <option value="6">Hacia Zona 6 (Fondo Centro)</option>
-              <option value="3">Hacia Zona 3 (Finta Corta)</option>
-            </select>
-          </div>
+        <div class="legend-simple" style="justify-content:center;">
+          <span><i class="dot-swatch" style="background:var(--gold)"></i>Colocador</span>
+          <span><i class="dot-swatch" style="background:var(--cyan)"></i>Líbero</span>
+          <span><i class="dot-swatch" style="background:var(--green)"></i>Remate Punto</span>
+          <span><i class="dot-swatch" style="background:var(--red)"></i>Remate Fallado</span>
         </div>
-
-        <div class="homography-readout" id="homography-readout">
-          <span>Homografía H (9m×18m)</span>
-          <span id="coord-readout">Haz click en la pista 2D</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- RIGHT COLUMN: ROTATIONS & ANALYTICAL CHARTS PER SET AND FULL MATCH -->
-    <div class="right-column">
-
-      <!-- COMPARATIVE CHART: CADA SET VS PARTIDO COMPLETO -->
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            🏆 COMPARATIVA GENERAL: POR CADA SET VS PARTIDO COMPLETO
-          </div>
-          <span class="mono-tag">Haz clic en cualquier tarjeta para filtrar</span>
-        </div>
-        <div class="set-comparison-grid" id="set-comparison-grid"></div>
-      </section>
-
-      <!-- ROTATION STATE MACHINE STRIP (R1-R6) -->
-      <section class="panel">
-        <div class="panel-header">
-          <div class="panel-title">
-            🔄 MÁQUINA DE ESTADOS DE ROTACIÓN (R1 – R6) & ROLES INFERIDOS SIN OCR
-          </div>
-          <span class="mono-tag" id="setter-status-badge">Colocador en Zona 1</span>
-        </div>
-        <div class="rotation-strip" id="rotation-strip"></div>
-      </section>
-
-      <!-- TWO MAIN CHARTS (FILTERED BY SELECTED SET OR FULL MATCH) -->
-      <div class="charts-grid">
-
-        <!-- CHART 1: ATTACK EFFICIENCY BY ZONE -->
-        <section class="panel">
-          <div class="panel-header">
-            <div class="panel-title" id="atk-chart-title">📊 REMATES POR ZONA (Z1–Z6)</div>
-            <span class="mono-tag">Eficiencia = (K - E) / Tot</span>
-          </div>
-          <div class="chart-rows" id="attack-zone-chart"></div>
-          <div class="legend-row">
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--kill-green)"></span> Punto Directo (Kill)</div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--inplay-cyan)"></span> En Juego</div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--fault-red)"></span> Error / Bloqueado</div>
-          </div>
-        </section>
-
-        <!-- CHART 2: SERVE ERRORS & VULNERABILITY BY ROTATION -->
-        <section class="panel">
-          <div class="panel-header">
-            <div class="panel-title" id="srv-chart-title">🎯 SAQUES POR ROTACIÓN (R1–R6)</div>
-            <span class="mono-tag" id="vulnerable-rot-badge" style="color:#f87171; border-color:#ef4444;">Crítica: R3</span>
-          </div>
-          <div class="chart-rows" id="serve-rot-chart"></div>
-          <div class="legend-row">
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--kill-green)"></span> Ace</div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--inplay-cyan)"></span> En Juego</div>
-            <div class="legend-item"><span class="legend-swatch" style="background:var(--fault-red)"></span> Fallo (Red / Fuera)</div>
-          </div>
-        </section>
-
-      </div>
-
-      <!-- BOTTOM PANEL: HYBRID TAGGING + LIVE EVENT FEED -->
-      <div class="bottom-grid">
-
-        <!-- HYBRID TAGGING CONTROLLER -->
-        <section class="panel">
-          <div class="panel-header">
-            <div class="panel-title">🤖 ETIQUETADO HÍBRIDO (IA + HOTKEYS)</div>
-            <span class="mono-tag" id="ai-confidence-tag">YOLO + TrackNet</span>
-          </div>
-          <div class="ai-proposal-box">
-            <div style="font-size:0.76rem; color:var(--text-muted);">
-              Propuesta detectada en el stream:
-            </div>
-            <div class="ai-proposal-details" id="ai-proposal-details"></div>
-            <div class="hotkey-bar">
-              <button class="btn btn-green" style="flex:1" onclick="sendHybridTag('v')">
-                Validar <kbd>V</kbd>
-              </button>
-              <button class="btn btn-gold" style="flex:1" onclick="sendHybridTag('c')">
-                Corregir <kbd>C</kbd>
-              </button>
-              <button class="btn btn-red" onclick="sendHybridTag('d')">
-                <kbd>D</kbd>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        <!-- RECENT EVENTS LOG -->
-        <section class="panel">
-          <div class="panel-header">
-            <div class="panel-title">📋 REGISTRO DE ACCIONES (<span id="log-scope-label">TODOS LOS SETS</span>)</div>
-            <span class="mono-tag">100% Fiabilidad</span>
-          </div>
-          <div style="overflow-x:auto;">
-            <table class="events-table">
-              <thead>
-                <tr>
-                  <th>Set</th>
-                  <th>#</th>
-                  <th>Rotación</th>
-                  <th>Origen → Destino</th>
-                  <th>Rol Inferido</th>
-                  <th>Resultado</th>
-                </tr>
-              </thead>
-              <tbody id="events-tbody"></tbody>
-            </table>
-          </div>
-        </section>
-
       </div>
 
     </div>
 
-  </main>
+    <!-- COLUMNA DERECHA: GRÁFICOS CLAROS POR SET Y PARTIDO ENTERO -->
+    <div style="display:flex; flex-direction:column; gap:16px;">
+
+      <!-- 1. COMPARATIVA RÁPIDA: PARTIDO ENTERO Y CADA SET -->
+      <div class="card">
+        <div class="card-title">
+          <span>🏆 Comparativa General: Partido Entero vs Cada Set</span>
+          <span class="card-subtitle">Haz clic en cualquier recuadro para ver sus gráficos en detalle</span>
+        </div>
+        <div class="summary-cards" id="summary-cards"></div>
+      </div>
+
+      <!-- 2. LOS DOS GRÁFICOS PRINCIPALES -->
+      <div class="charts-two-col">
+
+        <!-- GRÁFICO A: REMATES POR ZONA (Z1 a Z6) -->
+        <div class="card">
+          <div class="card-title">
+            <span id="title-chart-zones">📊 Remates por Zona (Zonas 1 a 6)</span>
+          </div>
+          <div class="visual-bars" id="chart-zones"></div>
+          <div class="legend-simple">
+            <span><i class="dot-swatch" style="background:var(--green)"></i>Punto (Kill)</span>
+            <span><i class="dot-swatch" style="background:var(--cyan)"></i>Sigue en juego</span>
+            <span><i class="dot-swatch" style="background:var(--red)"></i>Error / Bloqueado</span>
+          </div>
+        </div>
+
+        <!-- GRÁFICO B: SAQUES FALLADOS POR ROTACIÓN (R1 a R6) -->
+        <div class="card">
+          <div class="card-title">
+            <span id="title-chart-serves">🎯 Saques y Fallos por Rotación (R1 a R6)</span>
+            <span id="worst-rot-alert" style="font-size:0.8rem; color:#f87171; font-weight:700;"></span>
+          </div>
+          <div class="visual-bars" id="chart-serves"></div>
+          <div class="legend-simple">
+            <span><i class="dot-swatch" style="background:var(--green)"></i>Punto Directo (Ace)</span>
+            <span><i class="dot-swatch" style="background:var(--cyan)"></i>Saque Bueno</span>
+            <span><i class="dot-swatch" style="background:var(--red)"></i>Saque Fallado (Red / Fuera)</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 3. CONTROL DE ROTACIÓN ACTUAL (R1 - R6) -->
+      <div class="card">
+        <div class="card-title">
+          <span>🔄 Rotación Actual en Pista (R1 a R6)</span>
+          <span class="card-subtitle" id="setter-info-text">Rota automáticamente al recuperar el saque</span>
+        </div>
+        <div class="rot-grid" id="rot-grid"></div>
+      </div>
+
+    </div>
+
+  </div>
 
   <script>
-    const HOME_ZONE_SVG_COORDS = {
-      "1": { cx: 270, cy: 510 },
-      "2": { cx: 270, cy: 375 },
-      "3": { cx: 180, cy: 375 },
-      "4": { cx: 90,  cy: 375 },
-      "5": { cx: 90,  cy: 510 },
-      "6": { cx: 180, cy: 510 }
+    const HOME_ZONE_COORDS_SVG = {
+      "1": { cx: 270, cy: 420 },
+      "2": { cx: 270, cy: 300 },
+      "3": { cx: 180, cy: 300 },
+      "4": { cx: 90,  cy: 300 },
+      "5": { cx: 90,  cy: 420 },
+      "6": { cx: 180, cy: 420 }
     };
 
-    function courtMetersToSvg(x_m, y_m) {
+    function metersToSvg(x_m, y_m) {
       return {
         x: 45 + (x_m * 30.0),
-        y: 600 - (y_m * 30.0)
+        y: 490 - (y_m * 25.55)
       };
     }
 
-    function svgToCourtMeters(svgX, svgY) {
+    function svgToMeters(svgX, svgY) {
       return {
         x: (svgX - 45.0) / 30.0,
-        y: (600.0 - svgY) / 30.0
+        y: (490.0 - svgY) / 25.55
       };
     }
 
-    async function fetchState() {
-      const res = await fetch('/api/state');
+    function fillSampleLink() {
+      document.getElementById('input-stream-url').value =
+        'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
+    }
+
+    function openWelcomeModal() {
+      document.getElementById('welcome-modal').classList.remove('hidden');
+    }
+
+    function renderVideoPlayer(url) {
+      const container = document.getElementById('stream-container');
+      container.innerHTML = '';
+
+      if (!url) {
+        container.innerHTML = '<div class="stream-placeholder">Sin enlace de vídeo</div>';
+        return;
+      }
+
+      document.getElementById('active-stream-text').textContent = `Fuente: ${url}`;
+
+      // Check if YouTube URL
+      const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+      if (ytMatch) {
+        const videoId = ytMatch[1];
+        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
+        document.getElementById('player-status-tag').textContent = 'YouTube Conectado';
+        return;
+      }
+
+      // Otherwise HTML5 video / HLS (.m3u8)
+      const video = document.createElement('video');
+      video.controls = true;
+      video.muted = true;
+      video.playsInline = true;
+      container.appendChild(video);
+
+      if (url.includes('.m3u8') && window.Hls && Hls.isSupported()) {
+        const hls = new Hls();
+        hls.loadSource(url);
+        hls.attachMedia(video);
+        document.getElementById('player-status-tag').textContent = 'Stream HLS (.m3u8) Activo';
+      } else {
+        video.src = url;
+        document.getElementById('player-status-tag').textContent = 'Vídeo Conectado';
+      }
+    }
+
+    async function startAnalysis(autoAnalyze) {
+      const url = document.getElementById('input-stream-url').value.trim() || 'https://stream.fivb.org/live/vnl_court1.m3u8';
+      const homeName = document.getElementById('input-home-name').value.trim() || 'Mi Equipo';
+      const awayName = document.getElementById('input-away-name').value.trim() || 'Rival';
+      const initRot = parseInt(document.getElementById('input-init-rotation').value, 10);
+      const initSrv = document.getElementById('input-init-server').value;
+
+      const res = await fetch('/api/connect-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stream_url: url,
+          home_name: homeName,
+          away_name: awayName,
+          initial_rotation: initRot,
+          initial_server: initSrv,
+          auto_analyze: autoAnalyze
+        })
+      });
       const state = await res.json();
-      renderStudio(state);
+      document.getElementById('welcome-modal').classList.add('hidden');
+      renderVideoPlayer(url);
+      renderDashboard(state);
     }
 
     async function selectScope(scopeKey) {
@@ -921,7 +914,7 @@
         body: JSON.stringify({ scope: String(scopeKey) })
       });
       const state = await res.json();
-      renderStudio(state);
+      renderDashboard(state);
     }
 
     async function scorePoint(winner) {
@@ -931,7 +924,7 @@
         body: JSON.stringify({ winner })
       });
       const state = await res.json();
-      renderStudio(state);
+      renderDashboard(state);
     }
 
     async function selectRotation(rotNum) {
@@ -941,7 +934,7 @@
         body: JSON.stringify({ team: 'HOME', rotation: rotNum })
       });
       const state = await res.json();
-      renderStudio(state);
+      renderDashboard(state);
     }
 
     async function handleCourtClick(evt) {
@@ -950,14 +943,7 @@
       pt.x = evt.clientX;
       pt.y = evt.clientY;
       const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
-      const meters = svgToCourtMeters(svgP.x, svgP.y);
-
-      const marker = document.getElementById('click-marker');
-      marker.setAttribute('cx', svgP.x);
-      marker.setAttribute('cy', svgP.y);
-
-      const outcome = document.getElementById('click-outcome').value;
-      const targetZone = parseInt(document.getElementById('click-target-zone').value, 10);
+      const meters = svgToMeters(svgP.x, svgP.y);
 
       const res = await fetch('/api/court-action', {
         method: 'POST',
@@ -966,293 +952,203 @@
           x: meters.x,
           y: meters.y,
           action_type: 'ATTACK',
-          outcome: outcome,
-          target_zone: targetZone
+          outcome: 'KILL',
+          target_zone: 5
         })
       });
       const state = await res.json();
-      renderStudio(state);
-
-      if (state.last_mapped_point) {
-        const mp = state.last_mapped_point;
-        document.getElementById('coord-readout').textContent =
-          `Cam(${mp.pixel_u},${mp.pixel_v}) → (${mp.x}m, ${mp.y}m) [${mp.team_side} ${mp.zone}]`;
-      }
+      renderDashboard(state);
     }
 
-    async function sendHybridTag(hotkey) {
-      const correctedOutcome = hotkey === 'c' ? document.getElementById('click-outcome').value : null;
-      const res = await fetch('/api/hybrid-tag', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          hotkey: hotkey,
-          corrected_outcome: correctedOutcome
-        })
-      });
-      const state = await res.json();
-      renderStudio(state);
-    }
+    function renderDashboard(state) {
+      const scope = state.active_scope; // 'ALL' or '1', '2', '3'
+      const scopeTitle = scope === 'ALL' ? 'Partido Entero' : `Set ${scope}`;
 
-    async function resetMatch() {
-      const res = await fetch('/api/reset', { method: 'POST' });
-      const state = await res.json();
-      renderStudio(state);
-    }
-
-    function renderStudio(state) {
-      const activeScope = state.active_scope; // "ALL" or "1", "2", "3"
-      const scopeTag = activeScope === 'ALL' ? 'PARTIDO COMPLETO' : `SET ${activeScope}`;
-
-      // 1. Scoreboard
+      // 1. Nombres y Marcador
+      document.getElementById('label-home-name').textContent = state.match.home_name;
+      document.getElementById('label-away-name').textContent = state.match.away_name;
       document.getElementById('score-home').textContent = state.match.home_score;
       document.getElementById('score-away').textContent = state.match.away_score;
-      document.getElementById('set-indicator').textContent =
-        `SET ${state.match.current_set} (${state.match.sets_won.HOME} - ${state.match.sets_won.AWAY})`;
+      document.getElementById('set-title-top').textContent = `SET ${state.match.current_set} EN JUEGO`;
+      document.getElementById('sets-won-top').textContent =
+        `Sets: ${state.match.sets_won.HOME} - ${state.match.sets_won.AWAY}`;
 
-      document.getElementById('serve-home').className =
-        'serve-dot' + (state.match.serving_team === 'HOME' ? ' active' : '');
-      document.getElementById('serve-away').className =
-        'serve-dot' + (state.match.serving_team === 'AWAY' ? ' active' : '');
+      document.getElementById('badge-serve-home').style.display =
+        state.match.serving_team === 'HOME' ? 'inline-block' : 'none';
+      document.getElementById('badge-serve-away').style.display =
+        state.match.serving_team === 'AWAY' ? 'inline-block' : 'none';
 
-      // 2. Scope Filter Tabs (Partido Completo + Set 1, Set 2, Set 3...)
-      const tabsEl = document.getElementById('scope-tabs');
+      // 2. Pestañas de Selección (Partido Entero / Set 1 / Set 2 / Set 3)
+      const tabsEl = document.getElementById('set-tabs');
       tabsEl.innerHTML = '';
 
-      const allTab = document.createElement('button');
-      allTab.className = 'scope-tab' + (activeScope === 'ALL' ? ' active' : '');
-      allTab.onclick = () => selectScope('ALL');
-      allTab.innerHTML = `🏆 PARTIDO ENTERO <span class="score-pill">${state.match.sets_won.HOME}-${state.match.sets_won.AWAY} Sets</span>`;
-      tabsEl.appendChild(allTab);
+      const allBtn = document.createElement('button');
+      allBtn.className = 'set-tab' + (scope === 'ALL' ? ' active' : '');
+      allBtn.onclick = () => selectScope('ALL');
+      allBtn.innerHTML = `🏆 PARTIDO ENTERO <span class="pill">${state.match.sets_won.HOME}-${state.match.sets_won.AWAY}</span>`;
+      tabsEl.appendChild(allBtn);
 
-      state.available_sets.forEach((setNum) => {
-        const key = String(setNum);
-        const sb = state.set_scoreboards[key] || { HOME: 0, AWAY: 0, status: '' };
-        const btn = document.createElement('button');
-        btn.className = 'scope-tab' + (activeScope === key ? ' active' : '');
-        btn.onclick = () => selectScope(key);
-        btn.innerHTML = `SET ${setNum} <span class="score-pill">${sb.HOME}-${sb.AWAY}</span>`;
-        tabsEl.appendChild(btn);
+      state.available_sets.forEach((sNum) => {
+        const k = String(sNum);
+        const sb = state.set_scoreboards[k] || { HOME: 0, AWAY: 0 };
+        const b = document.createElement('button');
+        b.className = 'set-tab' + (scope === k ? ' active' : '');
+        b.onclick = () => selectScope(k);
+        b.innerHTML = `🏐 SET ${sNum} <span class="pill">${sb.HOME}-${sb.AWAY}</span>`;
+        tabsEl.appendChild(b);
       });
 
-      document.getElementById('active-scope-banner').textContent = `VISTA ACTIVA: ${state.analytics.scope_label}`;
-      document.getElementById('court-scope-tag').textContent = scopeTag;
-      document.getElementById('atk-chart-title').textContent = `📊 REMATES POR ZONA (${scopeTag})`;
-      document.getElementById('srv-chart-title').textContent = `🎯 SAQUES POR ROTACIÓN (${scopeTag})`;
-      document.getElementById('log-scope-label').textContent = scopeTag;
+      document.getElementById('scope-indicator-label').textContent =
+        `Viendo datos de: ${scopeTitle}`;
+      document.getElementById('title-chart-zones').textContent =
+        `📊 Remates por Zona (${scopeTitle})`;
+      document.getElementById('title-chart-serves').textContent =
+        `🎯 Saques por Rotación (${scopeTitle})`;
 
-      // 3. Render Set-by-Set vs Full Match Comparison Grid
-      const compGrid = document.getElementById('set-comparison-grid');
-      compGrid.innerHTML = '';
-      const compOrder = ['ALL', ...state.available_sets.map(String)];
-      compOrder.forEach((k) => {
+      // 3. Tarjetas Comparativas (Partido Entero vs Set 1, Set 2, Set 3)
+      const sumEl = document.getElementById('summary-cards');
+      sumEl.innerHTML = '';
+      ['ALL', ...state.available_sets.map(String)].forEach((k) => {
         const item = state.analytics.set_comparison[k];
         if (!item) return;
         const effPct = (item.attack_efficiency * 100).toFixed(0);
-        const killRatio = item.total_attacks > 0 ? (item.kills / item.total_attacks) * 100 : 0;
-        const errRatio = item.total_attacks > 0 ? (item.attack_errors / item.total_attacks) * 100 : 0;
-
         const card = document.createElement('div');
-        card.className = 'set-comp-card' + (activeScope === k ? ' active' : '');
+        card.className = 'sum-card' + (scope === k ? ' active' : '');
         card.onclick = () => selectScope(k);
         card.innerHTML = `
-          <div class="set-comp-header">
-            <span>${k === 'ALL' ? '🏆 ' + item.label : '🏐 ' + item.label}</span>
-            <span style="color:#34d399">${effPct}% Efic.</span>
+          <div class="sum-card-title">
+            <span>${k === 'ALL' ? '🏆 Partido Entero' : '🏐 Set ' + k}</span>
+            <span style="color:var(--green)">${effPct}% Acierto</span>
           </div>
-          <div class="mini-bar-bg">
-            <div style="width:${killRatio}%; background:var(--kill-green)"></div>
-            <div style="width:${errRatio}%; background:var(--fault-red)"></div>
-          </div>
-          <div class="set-comp-metrics">
-            <div>Kills: <strong>${item.kills}/${item.total_attacks}</strong></div>
-            <div>Mejor: <strong>${item.best_zone}</strong></div>
-            <div>Aces: <strong>${item.aces}</strong></div>
-            <div style="color:#f87171">Crítica: <strong>${item.vulnerable_rotation} (${item.vulnerable_rotation_errors})</strong></div>
+          <div class="sum-stat-big">${item.kills} pts <span style="font-size:0.85rem; color:var(--muted); font-weight:400;">de ${item.total_attacks} remates</span></div>
+          <div class="sum-details">
+            <div>🔥 Mejor zona de ataque: <strong style="color:#fff">Zona ${item.best_zone.replace('Z','')}</strong></div>
+            <div>⚠️ Más fallos de saque: <strong style="color:#f87171">${item.vulnerable_rotation} (${item.vulnerable_rotation_errors} fallos)</strong></div>
           </div>
         `;
-        compGrid.appendChild(card);
+        sumEl.appendChild(card);
       });
 
-      // 4. Rotation Strip (R1-R6)
-      const homeTac = state.tactical.HOME;
-      document.getElementById('setter-status-badge').textContent =
-        `HOME ${homeTac.rotation} • Colocador en Z${homeTac.setter_zone} (${homeTac.setter_is_front_row ? 'Delantero' : 'Zaguero'})`;
+      // 4. Gráfico 1: Barras de Remates por Zona (Z1 a Z6)
+      const zonesEl = document.getElementById('chart-zones');
+      zonesEl.innerHTML = '';
+      for (let z = 1; z <= 6; z++) {
+        const st = state.analytics.attack_by_zone[`Z${z}`];
+        const att = st.attempts || 0;
+        const kPct = att > 0 ? (st.kills / att) * 100 : 0;
+        const iPct = att > 0 ? (st.in_play / att) * 100 : 0;
+        const ePct = att > 0 ? (st.errors / att) * 100 : 0;
+        const eff = (st.efficiency * 100).toFixed(0);
 
-      const setterZones = { 1: 'Z1', 2: 'Z6', 3: 'Z5', 4: 'Z4', 5: 'Z3', 6: 'Z2' };
-      const stripEl = document.getElementById('rotation-strip');
-      stripEl.innerHTML = '';
-      for (let r = 1; r <= 6; r++) {
-        const pill = document.createElement('div');
-        pill.className = 'rot-pill' + (homeTac.rotation_num === r ? ' active' : '');
-        pill.onclick = () => selectRotation(r);
-        pill.innerHTML = `
-          <div class="rot-id">R${r}</div>
-          <div class="rot-sub">Colocador: ${setterZones[r]}</div>
+        const item = document.createElement('div');
+        item.className = 'bar-item';
+        item.innerHTML = `
+          <div class="bar-header">
+            <strong>Zona ${z} — ${st.role_es}</strong>
+            <span>${st.kills} puntos de ${att} remates (${eff}% eficacia)</span>
+          </div>
+          <div class="bar-rail">
+            <div class="seg-green" style="width:${kPct}%"></div>
+            <div class="seg-cyan" style="width:${iPct}%"></div>
+            <div class="seg-red" style="width:${ePct}%"></div>
+          </div>
         `;
-        stripEl.appendChild(pill);
+        zonesEl.appendChild(item);
       }
 
-      // 5. Draw 2D Court Players & Filtered Trajectories
+      // 5. Gráfico 2: Barras de Saques y Fallos por Rotación (R1 a R6)
+      const vuln = state.analytics.most_vulnerable_rotation;
+      document.getElementById('worst-rot-alert').textContent =
+        `⚠️ Más fallos en ${vuln.rotation} (${vuln.errors} errores)`;
+
+      const servesEl = document.getElementById('chart-serves');
+      servesEl.innerHTML = '';
+      for (let r = 1; r <= 6; r++) {
+        const sb = state.analytics.serves_by_rotation[`R${r}`];
+        const tot = sb.TOTAL_SERVES || 0;
+        const aPct = tot > 0 ? (sb.ACE / tot) * 100 : 0;
+        const pPct = tot > 0 ? (sb.IN_PLAY / tot) * 100 : 0;
+        const errPct = tot > 0 ? (sb.TOTAL_ERRORS / tot) * 100 : 0;
+
+        const item = document.createElement('div');
+        item.className = 'bar-item';
+        item.innerHTML = `
+          <div class="bar-header">
+            <strong>Rotación R${r}</strong>
+            <span>${sb.TOTAL_ERRORS} fallos (Red: ${sb.ERROR_NET}, Fuera: ${sb.ERROR_OUT}) • ${sb.ACE} Aces</span>
+          </div>
+          <div class="bar-rail">
+            <div class="seg-green" style="width:${aPct}%"></div>
+            <div class="seg-cyan" style="width:${pPct}%"></div>
+            <div class="seg-red" style="width:${errPct}%"></div>
+          </div>
+        `;
+        servesEl.appendChild(item);
+      }
+
+      // 6. Rueda de Rotación Actual (R1-R6)
+      const homeTac = state.tactical.HOME;
+      document.getElementById('setter-info-text').textContent =
+        `Ahora en ${homeTac.rotation}: El Colocador está en Zona ${homeTac.setter_zone} (${homeTac.setter_is_front_row ? 'Delantero' : 'Zaguero'})`;
+
+      const setterZones = { 1: 'Zona 1', 2: 'Zona 6', 3: 'Zona 5', 4: 'Zona 4', 5: 'Zona 3', 6: 'Zona 2' };
+      const rotGrid = document.getElementById('rot-grid');
+      rotGrid.innerHTML = '';
+      for (let r = 1; r <= 6; r++) {
+        const btn = document.createElement('div');
+        btn.className = 'rot-btn' + (homeTac.rotation_num === r ? ' active' : '');
+        btn.onclick = () => selectRotation(r);
+        btn.innerHTML = `
+          <strong>R${r}</strong>
+          <span>Colocador: ${setterZones[r]}</span>
+        `;
+        rotGrid.appendChild(btn);
+      }
+
+      // 7. Dibujar Pista 2D (Flechas y Jugadores)
       const trajLayer = document.getElementById('trajectories-layer');
       trajLayer.innerHTML = '';
       state.trajectories.forEach((t) => {
-        const p1 = courtMetersToSvg(t.start_x, t.start_y);
-        const p2 = courtMetersToSvg(t.end_x, t.end_y);
-        let color = '#06b6d4';
-        let marker = 'url(#arrow-inplay)';
-        if (t.outcome === 'KILL') {
-          color = '#10b981';
-          marker = 'url(#arrow-kill)';
-        } else if (t.outcome.startsWith('ERROR') || t.outcome === 'BLOCKED') {
-          color = '#ef4444';
-          marker = 'url(#arrow-err)';
-        }
+        const p1 = metersToSvg(t.start_x, t.start_y);
+        const p2 = metersToSvg(t.end_x, t.end_y);
+        const isKill = t.outcome === 'KILL';
+        const isErr = t.outcome.startsWith('ERROR') || t.outcome === 'BLOCKED';
+        const color = isKill ? '#10b981' : (isErr ? '#ef4444' : '#06b6d4');
+        const marker = isKill ? 'url(#arrow-kill)' : 'url(#arrow-err)';
+
         const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
         line.setAttribute('x1', p1.x);
         line.setAttribute('y1', p1.y);
         line.setAttribute('x2', p2.x);
         line.setAttribute('y2', p2.y);
         line.setAttribute('stroke', color);
-        line.setAttribute('stroke-width', '2.4');
-        line.setAttribute('stroke-opacity', '0.88');
+        line.setAttribute('stroke-width', '2.5');
+        line.setAttribute('stroke-opacity', '0.85');
         line.setAttribute('marker-end', marker);
         trajLayer.appendChild(line);
       });
 
       const playersLayer = document.getElementById('players-layer');
       playersLayer.innerHTML = '';
-      Object.entries(homeTac.zones).forEach(([zoneNum, role]) => {
-        const pos = HOME_ZONE_SVG_COORDS[zoneNum];
-        const isSetter = role === 'SETTER';
-        const isLibero = role === 'LIBERO';
-        const fill = isSetter ? '#f5b700' : (isLibero ? '#06b6d4' : '#0f172a');
-        const textFill = (isSetter || isLibero) ? '#090d16' : '#ffffff';
+      Object.entries(homeTac.zones).forEach(([zNum, roleCode]) => {
+        const pos = HOME_ZONE_COORDS_SVG[zNum];
+        const roleEs = homeTac.zones_es[zNum];
+        const isSetter = roleCode === 'SETTER';
+        const isLibero = roleCode === 'LIBERO';
+        const fill = isSetter ? '#f5b700' : (isLibero ? '#06b6d4' : '#090e1a');
+        const txtColor = (isSetter || isLibero) ? '#000' : '#fff';
 
         const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
         g.innerHTML = `
-          <circle cx="${pos.cx}" cy="${pos.cy}" r="18" fill="${fill}" stroke="#ffffff" stroke-width="2" />
-          <text x="${pos.cx}" y="${pos.cy + 4}" fill="${textFill}" font-size="9.5" font-family="JetBrains Mono" font-weight="bold" text-anchor="middle">
-            ${role.replace('OUTSIDE_', 'OH').replace('MIDDLE_', 'MB').replace('OPPOSITE', 'OPP').replace('SETTER', 'SET')}
-          </text>
+          <circle cx="${pos.cx}" cy="${pos.cy}" r="22" fill="${fill}" stroke="#fff" stroke-width="2" />
+          <text x="${pos.cx}" y="${pos.cy + 4}" fill="${txtColor}" font-size="9" font-weight="bold" text-anchor="middle">${roleEs}</text>
         `;
         playersLayer.appendChild(g);
       });
-
-      // 6. Render Chart 1: Attack Efficiency by Zone (Z1-Z6)
-      const atkChart = document.getElementById('attack-zone-chart');
-      atkChart.innerHTML = '';
-      for (let z = 1; z <= 6; z++) {
-        const key = `Z${z}`;
-        const st = state.analytics.attack_by_zone[key];
-        const att = st.attempts || 0;
-        const kPct = att > 0 ? (st.kills / att) * 100 : 0;
-        const iPct = att > 0 ? (st.in_play / att) * 100 : 0;
-        const ePct = att > 0 ? (st.errors / att) * 100 : 0;
-        const effStr = (st.efficiency * 100).toFixed(0) + '%';
-
-        const row = document.createElement('div');
-        row.className = 'chart-row';
-        row.innerHTML = `
-          <div class="chart-label">
-            <strong>Zona ${z} (${st.role.replace('OUTSIDE_', 'OH').replace('MIDDLE_', 'MB')})</strong>
-            <span>${att} int • ${st.kills} pts</span>
-          </div>
-          <div class="bar-track">
-            <div class="bar-seg-kill" style="width:${kPct}%"></div>
-            <div class="bar-seg-inplay" style="width:${iPct}%"></div>
-            <div class="bar-seg-err" style="width:${ePct}%"></div>
-          </div>
-          <div class="chart-metric" style="color:${st.efficiency >= 0.25 ? '#34d399' : '#f8fafc'}">
-            Efic: ${effStr}
-          </div>
-        `;
-        atkChart.appendChild(row);
-      }
-
-      // 7. Render Chart 2: Serve Errors by Rotation (R1-R6)
-      const vuln = state.analytics.most_vulnerable_rotation;
-      document.getElementById('vulnerable-rot-badge').textContent =
-        `Más fallos (${scopeTag}): ${vuln.rotation} (${vuln.errors} err)`;
-
-      const srvChart = document.getElementById('serve-rot-chart');
-      srvChart.innerHTML = '';
-      for (let r = 1; r <= 6; r++) {
-        const rKey = `R${r}`;
-        const sb = state.analytics.serves_by_rotation[rKey];
-        const tot = sb.TOTAL_SERVES || 0;
-        const aPct = tot > 0 ? (sb.ACE / tot) * 100 : 0;
-        const pPct = tot > 0 ? (sb.IN_PLAY / tot) * 100 : 0;
-        const errPct = tot > 0 ? (sb.TOTAL_ERRORS / tot) * 100 : 0;
-
-        const row = document.createElement('div');
-        row.className = 'chart-row';
-        row.innerHTML = `
-          <div class="chart-label">
-            <strong>Rotación ${rKey}</strong>
-            <span>Red:${sb.ERROR_NET} | Fuera:${sb.ERROR_OUT}</span>
-          </div>
-          <div class="bar-track">
-            <div class="bar-seg-kill" style="width:${aPct}%"></div>
-            <div class="bar-seg-inplay" style="width:${pPct}%"></div>
-            <div class="bar-seg-err" style="width:${errPct}%"></div>
-          </div>
-          <div class="chart-metric" style="color:${sb.TOTAL_ERRORS > 1 ? '#f87171' : '#cbd5e1'}">
-            ${sb.TOTAL_ERRORS} err / ${tot}
-          </div>
-        `;
-        srvChart.appendChild(row);
-      }
-
-      // 8. Render AI Proposal
-      if (state.ai_proposal) {
-        const p = state.ai_proposal;
-        document.getElementById('ai-confidence-tag').textContent = `Confianza IA: ${(p.confidence * 100).toFixed(0)}%`;
-        document.getElementById('ai-proposal-details').innerHTML = `
-          <div><strong>Origen:</strong> Zona ${p.origin_zone}</div>
-          <div><strong>Destino:</strong> Zona ${p.target_zone}</div>
-          <div><strong>Rol Inferido:</strong> ${p.inferred_role}</div>
-          <div><strong>Predicción:</strong> ${p.outcome}</div>
-        `;
-      }
-
-      // 9. Render Recent Events Table
-      const tbody = document.getElementById('events-tbody');
-      tbody.innerHTML = '';
-      state.recent_attacks.forEach((ev) => {
-        const tr = document.createElement('tr');
-        const isKill = ev.outcome === 'KILL';
-        const isErr = ev.outcome.startsWith('ERROR') || ev.outcome === 'BLOCKED';
-        tr.innerHTML = `
-          <td>S${ev.set}</td>
-          <td>#${ev.rally}</td>
-          <td>${ev.rotation}</td>
-          <td>${ev.origin_zone} → ${ev.target_zone}</td>
-          <td>${ev.role}</td>
-          <td class="${isKill ? 'badge-kill' : (isErr ? 'badge-err' : '')}">${ev.outcome}</td>
-        `;
-        tbody.appendChild(tr);
-      });
     }
 
-    // Keyboard shortcuts: V/C/D (Hybrid Tag), H/A (Points), 0 (Full Match), 1/2/3 (Set Filter)
-    window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
-      const k = e.key.toLowerCase();
-      if (k === 'v' || k === 'c' || k === 'd') {
-        sendHybridTag(k);
-      } else if (k === 'h') {
-        scorePoint('HOME');
-      } else if (k === 'a') {
-        scorePoint('AWAY');
-      } else if (k === '0') {
-        selectScope('ALL');
-      } else if (['1', '2', '3', '4', '5'].includes(k)) {
-        selectScope(k);
-      }
-    });
-
-    fetchState();
+    // Cargar estado de fondo por si cierra el modal
+    fetch('/api/state').then(r => r.json()).then(renderDashboard);
   </script>
 </body>
 </html>
