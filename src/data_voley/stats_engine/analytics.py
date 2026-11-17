@@ -2,12 +2,13 @@
 MatchStatsEngine Module — Spatial & Rotational Cross-Tabulation Analytics.
 
 Aggregates serve and attack events, crossing spatial origin/target zones (Z1-Z6)
-with active tactical rotations (R1-R6) and inferred player roles.
+with active tactical rotations (R1-R6) and inferred player roles, with support
+for both per-set filtering and full-match aggregation.
 """
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from data_voley.domain.enums import (
     AttackOutcome,
@@ -23,7 +24,8 @@ from data_voley.domain.ports import ITacticalStatePort
 
 class MatchStatsEngine:
     """
-    Core analytical engine correlating spatial actions with tactical rotations (R1-R6).
+    Core analytical engine correlating spatial actions with tactical rotations (R1-R6)
+    across individual sets and the complete match.
     """
 
     def __init__(self, tactical_port: ITacticalStatePort) -> None:
@@ -42,6 +44,15 @@ class MatchStatsEngine:
         """Return all recorded attack/spike events."""
         return list(self._attack_events)
 
+    def get_recorded_sets(self) -> List[int]:
+        """Return sorted list of all set numbers present in recorded events or active set."""
+        sets = {self._tactical.current_set}
+        for ev in self._serve_events:
+            sets.add(ev.set_number)
+        for ev in self._attack_events:
+            sets.add(ev.set_number)
+        return sorted(sets)
+
     def record_serve(
         self,
         team: TeamSide,
@@ -50,14 +61,16 @@ class MatchStatsEngine:
         origin_coord: Optional[CourtPoint2D] = None,
         validation_status: TagValidationStatus = TagValidationStatus.HUMAN_VALIDATED,
         timestamp_ms: float = 0.0,
+        set_override: Optional[int] = None,
     ) -> ServeEvent:
         """
         Record a service event bound to the team's current tactical rotation (R1-R6).
         """
         self._action_seq += 1
         active_rotation = self._tactical.get_rotation(team)
+        set_num = set_override if set_override is not None else self._tactical.current_set
         event = ServeEvent(
-            set_number=self._tactical.current_set,
+            set_number=set_num,
             rally_number=self._action_seq,
             team=team,
             rotation=active_rotation,
@@ -79,6 +92,7 @@ class MatchStatsEngine:
         origin_coord: Optional[CourtPoint2D] = None,
         validation_status: TagValidationStatus = TagValidationStatus.HUMAN_VALIDATED,
         timestamp_ms: float = 0.0,
+        set_override: Optional[int] = None,
     ) -> AttackEvent:
         """
         Record an attack event from `origin_zone`, automatically inferring the attacker's
@@ -87,9 +101,10 @@ class MatchStatsEngine:
         self._action_seq += 1
         active_rotation = self._tactical.get_rotation(team)
         inferred_role = self._tactical.infer_role_at_zone(team, origin_zone)
+        set_num = set_override if set_override is not None else self._tactical.current_set
 
         event = AttackEvent(
-            set_number=self._tactical.current_set,
+            set_number=set_num,
             rally_number=self._action_seq,
             team=team,
             rotation=active_rotation,
@@ -109,6 +124,7 @@ class MatchStatsEngine:
     ) -> Dict[Rotation, Dict[str, int]]:
         """
         Cross-tabulate service outcomes and errors across Rotations R1 to R6.
+        If `set_number` is None, aggregates across the entire match.
         """
         matrix: Dict[Rotation, Dict[str, int]] = {
             rot: {
@@ -141,7 +157,8 @@ class MatchStatsEngine:
         self, team: TeamSide, set_number: Optional[int] = None
     ) -> Tuple[Rotation, int]:
         """
-        Identify the rotation (R1-R6) with the highest count of service errors.
+        Identify the rotation (R1-R6) with the highest count of service errors
+        for a specific set or for the entire match (`set_number=None`).
         """
         breakdown = self.get_serve_errors_by_rotation(team, set_number=set_number)
         worst_rot = max(
@@ -154,7 +171,8 @@ class MatchStatsEngine:
         self, team: TeamSide, set_number: Optional[int] = None
     ) -> Dict[CourtZone, Dict[str, float | int]]:
         """
-        Compute attack attempts, kills, errors, and hitting efficiency per CourtZone (1-6).
+        Compute attack attempts, kills, errors, and hitting efficiency per CourtZone (1-6)
+        for a given set or the entire match (`set_number=None`).
 
         Formula:
             Efficiency = (Kills - Errors) / Attempts
@@ -195,16 +213,18 @@ class MatchStatsEngine:
         return stats
 
     def get_attack_stats_by_rotation(
-        self, team: TeamSide
+        self, team: TeamSide, set_number: Optional[int] = None
     ) -> Dict[Rotation, Dict[str, float | int]]:
         """
-        Cross-tabulate offensive spike performance across Rotations R1 to R6.
+        Cross-tabulate offensive spike performance across Rotations R1 to R6
+        for a specific set or for the entire match (`set_number=None`).
         """
         rot_stats: Dict[Rotation, Dict[str, float | int]] = {
             rot: {
                 "attempts": 0,
                 "kills": 0,
                 "errors": 0,
+                "in_play": 0,
                 "efficiency": 0.0,
             }
             for rot in Rotation
@@ -213,12 +233,17 @@ class MatchStatsEngine:
         for ev in self._attack_events:
             if ev.team != team:
                 continue
+            if set_number is not None and ev.set_number != set_number:
+                continue
+
             r_bucket = rot_stats[ev.rotation]
             r_bucket["attempts"] = int(r_bucket["attempts"]) + 1
             if ev.outcome == AttackOutcome.KILL:
                 r_bucket["kills"] = int(r_bucket["kills"]) + 1
             elif ev.outcome.is_error:
                 r_bucket["errors"] = int(r_bucket["errors"]) + 1
+            else:
+                r_bucket["in_play"] = int(r_bucket["in_play"]) + 1
 
         for rot, r_bucket in rot_stats.items():
             att = int(r_bucket["attempts"])
@@ -228,3 +253,48 @@ class MatchStatsEngine:
                 r_bucket["efficiency"] = round((kills - errs) / att, 4)
 
         return rot_stats
+
+    def get_set_comparison_summary(self, team: TeamSide) -> Dict[str, Dict[str, Any]]:
+        """
+        Build a comparative summary for each individual Set ('1', '2', ...) and
+        the Full Match ('ALL'), enabling side-by-side set vs match charts.
+        """
+        scopes: List[Optional[int]] = [None] + self.get_recorded_sets()
+        summary: Dict[str, Dict[str, Any]] = {}
+
+        for scope in scopes:
+            key = "ALL" if scope is None else str(scope)
+            zone_map = self.get_attack_stats_by_zone(team, set_number=scope)
+            srv_map = self.get_serve_errors_by_rotation(team, set_number=scope)
+            worst_rot, worst_errs = self.get_most_vulnerable_serve_rotation(team, set_number=scope)
+
+            tot_atk = sum(int(z["attempts"]) for z in zone_map.values())
+            tot_kills = sum(int(z["kills"]) for z in zone_map.values())
+            tot_atk_err = sum(int(z["errors"]) for z in zone_map.values())
+            atk_eff = round((tot_kills - tot_atk_err) / tot_atk, 4) if tot_atk > 0 else 0.0
+
+            tot_srv = sum(int(r["TOTAL_SERVES"]) for r in srv_map.values())
+            tot_aces = sum(int(r["ACE"]) for r in srv_map.values())
+            tot_srv_err = sum(int(r["TOTAL_ERRORS"]) for r in srv_map.values())
+
+            best_zone = max(
+                CourtZone,
+                key=lambda z: (int(zone_map[z]["kills"]), float(zone_map[z]["efficiency"])),
+            )
+
+            summary[key] = {
+                "scope": key,
+                "label": "Partido Completo" if scope is None else f"Set {scope}",
+                "total_attacks": tot_atk,
+                "kills": tot_kills,
+                "attack_errors": tot_atk_err,
+                "attack_efficiency": atk_eff,
+                "total_serves": tot_srv,
+                "aces": tot_aces,
+                "serve_errors": tot_srv_err,
+                "vulnerable_rotation": worst_rot.name,
+                "vulnerable_rotation_errors": worst_errs,
+                "best_zone": f"Z{best_zone.value}",
+            }
+
+        return summary

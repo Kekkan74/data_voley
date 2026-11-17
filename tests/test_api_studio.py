@@ -12,6 +12,7 @@ from data_voley.api.server import (
     HybridDecisionRequest,
     RallyRequest,
     RotationOverrideRequest,
+    ScopeFilterRequest,
     get_state,
     health_check,
     override_rotation,
@@ -19,27 +20,53 @@ from data_voley.api.server import (
     register_court_click_action,
     register_rally,
     reset_studio,
+    set_analytics_scope,
 )
 
 
 def test_studio_health_and_initial_seeded_charts() -> None:
-    """Verify the visual studio initializes with populated chart data across R1-R6."""
+    """Verify the visual studio initializes with multi-set and full-match data."""
     assert health_check()["status"] == "ok"
     state = reset_studio()
 
-    assert "match" in state
-    assert "tactical" in state
-    assert "analytics" in state
-    assert "attack_by_zone" in state["analytics"]
-    assert "serves_by_rotation" in state["analytics"]
-    assert len(state["trajectories"]) > 0
-    assert state["analytics"]["most_vulnerable_rotation"]["rotation"] == "R3"
+    assert state["active_scope"] == "ALL"
+    assert state["available_sets"] == [1, 2, 3]
+    assert "set_comparison" in state["analytics"]
+    assert "ALL" in state["analytics"]["set_comparison"]
+    assert "1" in state["analytics"]["set_comparison"]
+    assert "2" in state["analytics"]["set_comparison"]
+    assert "3" in state["analytics"]["set_comparison"]
+
+
+def test_per_set_vs_full_match_scope_filtering() -> None:
+    """Verify filtering charts by Set 1, Set 2, Set 3, and Full Match ('ALL')."""
+    reset_studio()
+
+    # Filter by Set 1 (where R3 had the highest serve errors)
+    state_s1 = set_analytics_scope(ScopeFilterRequest(scope="1"))
+    assert state_s1["active_scope"] == "1"
+    assert state_s1["analytics"]["most_vulnerable_rotation"]["rotation"] == "R3"
+    assert all(t["set_number"] == 1 for t in state_s1["trajectories"])
+
+    # Filter by Set 2 (where R5 had the highest serve errors)
+    state_s2 = set_analytics_scope(ScopeFilterRequest(scope="2"))
+    assert state_s2["active_scope"] == "2"
+    assert state_s2["analytics"]["most_vulnerable_rotation"]["rotation"] == "R5"
+    assert all(t["set_number"] == 2 for t in state_s2["trajectories"])
+
+    # Filter back to ALL (Entire Match)
+    state_all = set_analytics_scope(ScopeFilterRequest(scope="ALL"))
+    assert state_all["active_scope"] == "ALL"
+    s1_atks = state_all["analytics"]["set_comparison"]["1"]["total_attacks"]
+    s2_atks = state_all["analytics"]["set_comparison"]["2"]["total_attacks"]
+    s3_atks = state_all["analytics"]["set_comparison"]["3"]["total_attacks"]
+    tot_atks = state_all["analytics"]["set_comparison"]["ALL"]["total_attacks"]
+    assert tot_atks == s1_atks + s2_atks + s3_atks
 
 
 def test_interactive_court_click_maps_homography_and_updates_charts() -> None:
     """Verify clicking on the 2D court maps to FIVB Zone 4 and records the spike."""
     reset_studio()
-    # Click at (1.5m, 7.5m) -> HOME Zone 4
     res = register_court_click_action(
         CourtClickRequest(
             x=1.5,
@@ -60,7 +87,7 @@ def test_rotation_override_and_hybrid_hotkey_tagging() -> None:
     reset_studio()
     state = override_rotation(RotationOverrideRequest(team="HOME", rotation=5))
     assert state["tactical"]["HOME"]["rotation"] == "R5"
-    assert state["tactical"]["HOME"]["setter_zone"] == 3  # R5 -> Setter in Zone 3
+    assert state["tactical"]["HOME"]["setter_zone"] == 3
 
     tagged = process_hybrid_tag(HybridDecisionRequest(hotkey="v"))
     assert len(tagged["recent_attacks"]) > 0
