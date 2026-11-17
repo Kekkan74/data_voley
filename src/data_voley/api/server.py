@@ -97,6 +97,8 @@ class StudioSession:
         self.active_scope: str = "ALL"
         self.current_proposal: Optional[Dict[str, Any]] = None
         self.stream_url: str = ""
+        self.start_offset_seconds: float = 0.0
+        self.start_time_formatted: str = "00:00"
         self.home_name: str = "Mi Equipo"
         self.away_name: str = "Rival"
         self.seed_initial_data()
@@ -104,6 +106,7 @@ class StudioSession:
     def connect_stream(
         self,
         stream_url: str,
+        start_minute: str = "00:00",
         home_name: str = "Mi Equipo",
         away_name: str = "Rival",
         initial_rotation: int = 1,
@@ -111,11 +114,13 @@ class StudioSession:
         auto_analyze: bool = True,
     ) -> None:
         """
-        Configure the session with the user's video/stream link and initial rotation.
-        If `auto_analyze` is True, extracts/simulates full multi-set telemetry from the stream.
+        Configure the session with the user's video/stream link, match start minute
+        (skipping previous match or warm-up), and initial rotation.
         """
         validated_url = VideoIngestion._validate_source(stream_url)
         self.stream_url = validated_url
+        self.start_offset_seconds = VideoIngestion.parse_start_time_to_seconds(start_minute)
+        self.start_time_formatted = VideoIngestion.format_seconds_to_mmss(self.start_offset_seconds)
         self.home_name = home_name.strip() or "Mi Equipo"
         self.away_name = away_name.strip() or "Rival"
 
@@ -124,7 +129,7 @@ class StudioSession:
 
         if auto_analyze:
             self.seed_initial_data(
-                seed_key=validated_url,
+                seed_key=f"{validated_url}@{self.start_offset_seconds}",
                 home_rot=init_rot,
                 initial_server=init_srv,
             )
@@ -329,6 +334,7 @@ SESSION = StudioSession()
 
 class ConnectStreamRequest(BaseModel):
     stream_url: str
+    start_minute: str = "00:00"
     home_name: str = "Mi Equipo"
     away_name: str = "Rival"
     initial_rotation: int = 1
@@ -441,6 +447,8 @@ def _serialize_state() -> Dict[str, Any]:
             },
             "serving_team": SESSION.tactical.serving_team.value,
             "stream_url": SESSION.stream_url,
+            "start_offset_seconds": SESSION.start_offset_seconds,
+            "start_time_formatted": SESSION.start_time_formatted,
         },
         "tactical": {
             "HOME": {
@@ -503,6 +511,7 @@ def get_state(scope: Optional[str] = None) -> Dict[str, Any]:
 def connect_stream_endpoint(req: ConnectStreamRequest) -> Dict[str, Any]:
     SESSION.connect_stream(
         stream_url=req.stream_url,
+        start_minute=req.start_minute,
         home_name=req.home_name,
         away_name=req.away_name,
         initial_rotation=req.initial_rotation,

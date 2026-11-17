@@ -2,6 +2,7 @@
 VideoIngestion Module — Asynchronous / Multithreaded HLS (.m3u8) & Video Stream Reader.
 
 Isolates video stream decoding (FFmpeg / OpenCV) from tactical logic and homography.
+Supports seeking directly to a match start offset (skipping warm-ups or prior matches).
 """
 
 from __future__ import annotations
@@ -25,8 +26,8 @@ class VideoIngestion:
     """
     Decoupled producer-consumer stream reader for HLS (.m3u8), RTSP, or local video files.
 
-    Validates stream source syntax and buffers decoded frames in a bounded queue
-    to prevent I/O stalls during YOLO/TrackNet GPU inference.
+    Supports `start_offset_seconds` to skip earlier matches or warm-up segments in
+    long tournament broadcasts.
     """
 
     ALLOWED_SCHEMES = ("http", "https", "rtsp", "file", "")
@@ -34,10 +35,12 @@ class VideoIngestion:
     def __init__(
         self,
         source: str,
+        start_offset_seconds: float = 0.0,
         buffer_size: int = 128,
         target_fps: Optional[float] = None,
     ) -> None:
         self.source = self._validate_source(source)
+        self.start_offset_seconds = max(0.0, float(start_offset_seconds))
         self.buffer_size = buffer_size
         self.target_fps = target_fps
         self._queue: queue.Queue[Optional[Tuple[int, float, np.ndarray]]] = queue.Queue(
@@ -45,6 +48,53 @@ class VideoIngestion:
         )
         self._stop_event = threading.Event()
         self._worker_thread: Optional[threading.Thread] = None
+
+    @staticmethod
+    def parse_start_time_to_seconds(value: str | int | float) -> float:
+        """
+        Convert a user-supplied start time into total seconds.
+
+        Accepted formats:
+        - Integer/float minutes: "15" -> 900.0 seconds (15 min)
+        - "MM:SS": "12:30" -> 750.0 seconds (12 min 30 sec)
+        - "HH:MM:SS": "01:05:20" -> 3920.0 seconds
+        """
+        if isinstance(value, (int, float)):
+            return max(0.0, float(value) * 60.0)
+
+        cleaned = str(value).strip()
+        if not cleaned:
+            return 0.0
+
+        parts = cleaned.split(":")
+        try:
+            if len(parts) == 1:
+                # Treated as minutes
+                return max(0.0, float(parts[0]) * 60.0)
+            if len(parts) == 2:
+                minutes = int(parts[0])
+                seconds = float(parts[1])
+                return max(0.0, minutes * 60.0 + seconds)
+            if len(parts) == 3:
+                hours = int(parts[0])
+                minutes = int(parts[1])
+                seconds = float(parts[2])
+                return max(0.0, hours * 3600.0 + minutes * 60.0 + seconds)
+        except ValueError as exc:
+            raise ValueError(f"Invalid start time format: '{value}'. Use 'MM:SS' or minutes.") from exc
+
+        raise ValueError(f"Unsupported time format: '{value}'.")
+
+    @staticmethod
+    def format_seconds_to_mmss(total_seconds: float) -> str:
+        """Format seconds as MM:SS (or HH:MM:SS if >= 1 hour)."""
+        secs = max(0, int(round(total_seconds)))
+        hours = secs // 3600
+        minutes = (secs % 3600) // 60
+        rem_secs = secs % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{rem_secs:02d}"
+        return f"{minutes:02d}:{rem_secs:02d}"
 
     @classmethod
     def _validate_source(cls, source: str) -> str:
@@ -54,7 +104,6 @@ class VideoIngestion:
             raise ValueError("Video stream source cannot be empty.")
         parsed = urlparse(cleaned)
         if parsed.scheme and parsed.scheme.lower() not in cls.ALLOWED_SCHEMES:
-            # Allow Windows drive letters like C:\path
             if len(parsed.scheme) > 1:
                 raise ValueError(f"Unsupported stream protocol: {parsed.scheme}")
         return cleaned
@@ -71,11 +120,14 @@ class VideoIngestion:
         self._worker_thread.start()
 
     def _decode_worker(self) -> None:
-        """Producer loop pulling frames from HLS/file capture into the bounded queue."""
+        """Producer loop pulling frames starting at `start_offset_seconds`."""
         cap = cv2.VideoCapture(self.source)
         if not cap.isOpened():
             self._queue.put(None)
             return
+
+        if self.start_offset_seconds > 0.0:
+            cap.set(cv2.CAP_PROP_POS_MSEC, self.start_offset_seconds * 1000.0)
 
         fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
         frame_idx = 0
@@ -87,7 +139,7 @@ class VideoIngestion:
                     if not ret:
                         self._queue.put(None)
                         break
-                    timestamp_ms = (frame_idx / fps) * 1000.0
+                    timestamp_ms = (self.start_offset_seconds * 1000.0) + (frame_idx / fps) * 1000.0
                     self._queue.put((frame_idx, timestamp_ms, frame))
                     frame_idx += 1
                 else:

@@ -544,10 +544,10 @@
         </div>
       </div>
 
-      <!-- PASO 1: LINK -->
+      <!-- PASO 1: LINK Y MINUTO DE INICIO -->
       <div class="step-box">
         <div class="step-title">
-          <span>1. Enlace del Vídeo o Stream del Partido</span>
+          <span>1. Enlace del Vídeo y Minuto donde empieza tu Partido</span>
           <button type="button" class="btn-demo-link" onclick="fillSampleLink()">
             Usar enlace de prueba
           </button>
@@ -559,6 +559,25 @@
           placeholder="Pega aquí tu enlace (YouTube, Twitch, stream .m3u8 o archivo .mp4)..."
           value="https://stream.fivb.org/live/vnl_final_court1.m3u8"
         />
+        <div style="margin-top:6px;">
+          <label class="field-label" style="color:#f8fafc; font-weight:600;">
+            ⏱️ ¿En qué minuto del vídeo empieza el partido? <span style="color:var(--muted); font-weight:400;">(Salta el partido anterior o el calentamiento)</span>
+          </label>
+          <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
+            <input
+              type="text"
+              id="input-start-minute"
+              class="text-input"
+              placeholder="Ej: 15 (minuto 15) o 12:30"
+              value="00:00"
+              style="max-width:220px;"
+            />
+            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='00:00'">00:00</button>
+            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='10:00'">Min 10:00</button>
+            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='15:00'">Min 15:00</button>
+            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='25:00'">Min 25:00</button>
+          </div>
+        </div>
       </div>
 
       <!-- PASO 2: EQUIPOS Y ROTACIÓN INICIAL -->
@@ -844,7 +863,7 @@
       document.getElementById('welcome-modal').classList.remove('hidden');
     }
 
-    function renderVideoPlayer(url) {
+    function renderVideoPlayer(url, startSeconds = 0, startFormatted = "00:00") {
       const container = document.getElementById('stream-container');
       container.innerHTML = '';
 
@@ -853,14 +872,18 @@
         return;
       }
 
-      document.getElementById('active-stream-text').textContent = `Fuente: ${url}`;
+      const startSecInt = Math.max(0, Math.floor(Number(startSeconds) || 0));
+      document.getElementById('active-stream-text').textContent =
+        `Fuente: ${url}  •  ⏱️ Inicio partido: min ${startFormatted}`;
 
       // Check if YouTube URL
       const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
       if (ytMatch) {
         const videoId = ytMatch[1];
-        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}" allowfullscreen></iframe>`;
-        document.getElementById('player-status-tag').textContent = 'YouTube Conectado';
+        const startParam = startSecInt > 0 ? `?start=${startSecInt}` : '';
+        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}${startParam}" allowfullscreen></iframe>`;
+        document.getElementById('player-status-tag').textContent =
+          `YouTube • Empieza en min ${startFormatted}`;
         return;
       }
 
@@ -871,19 +894,32 @@
       video.playsInline = true;
       container.appendChild(video);
 
+      const seekToStart = () => {
+        if (startSecInt > 0 && video.duration && startSecInt < video.duration) {
+          video.currentTime = startSecInt;
+        } else if (startSecInt > 0) {
+          try { video.currentTime = startSecInt; } catch (e) {}
+        }
+      };
+
+      video.addEventListener('loadedmetadata', seekToStart, { once: true });
+
       if (url.includes('.m3u8') && window.Hls && Hls.isSupported()) {
-        const hls = new Hls();
+        const hls = new Hls({ startPosition: startSecInt > 0 ? startSecInt : -1 });
         hls.loadSource(url);
         hls.attachMedia(video);
-        document.getElementById('player-status-tag').textContent = 'Stream HLS (.m3u8) Activo';
+        document.getElementById('player-status-tag').textContent =
+          `Stream HLS • Inicio en min ${startFormatted}`;
       } else {
         video.src = url;
-        document.getElementById('player-status-tag').textContent = 'Vídeo Conectado';
+        document.getElementById('player-status-tag').textContent =
+          `Vídeo • Inicio en min ${startFormatted}`;
       }
     }
 
     async function startAnalysis(autoAnalyze) {
       const url = document.getElementById('input-stream-url').value.trim() || 'https://stream.fivb.org/live/vnl_court1.m3u8';
+      const startMin = document.getElementById('input-start-minute').value.trim() || '00:00';
       const homeName = document.getElementById('input-home-name').value.trim() || 'Mi Equipo';
       const awayName = document.getElementById('input-away-name').value.trim() || 'Rival';
       const initRot = parseInt(document.getElementById('input-init-rotation').value, 10);
@@ -894,6 +930,7 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stream_url: url,
+          start_minute: startMin,
           home_name: homeName,
           away_name: awayName,
           initial_rotation: initRot,
@@ -903,7 +940,11 @@
       });
       const state = await res.json();
       document.getElementById('welcome-modal').classList.add('hidden');
-      renderVideoPlayer(url);
+      renderVideoPlayer(
+        url,
+        state.match.start_offset_seconds,
+        state.match.start_time_formatted
+      );
       renderDashboard(state);
     }
 
