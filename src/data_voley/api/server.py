@@ -34,8 +34,20 @@ from data_voley.domain import (
     TeamSide,
 )
 from data_voley.stats_engine import MatchStatsEngine
+from data_voley.stats_engine.analytics import compute_k1_advanced_analytics
 from data_voley.tactical_state import TacticalState
+from data_voley.tactical_state.k1_models import (
+    K1AttackEvent,
+    K1AttackOutcome,
+    RallyK1Sequence,
+    ReceptionEvent,
+    ReceptionQuality,
+    SetEvent,
+    SetQuality,
+    SetTempo,
+)
 from data_voley.video_ingestion import VideoIngestion
+from data_voley.vision_detector import K1DatasetExporter
 
 app = FastAPI(
     title="DataVoley Studio",
@@ -118,6 +130,8 @@ class StudioSession:
         self.set_scoreboards: Dict[int, Dict[str, Any]] = {}
         self.score_progression_by_set: Dict[int, List[Dict[str, Any]]] = {}
         self.referee_notes_by_set: Dict[int, Dict[str, int]] = {}
+        self.k1_sequences: List[RallyK1Sequence] = []
+        self.k1_exporter: K1DatasetExporter = K1DatasetExporter()
         self.active_scope: str = "ALL"
         self.current_proposal: Optional[Dict[str, Any]] = None
         self.stream_url: str = ""
@@ -248,6 +262,7 @@ class StudioSession:
         self.set_scoreboards.clear()
         self.score_progression_by_set.clear()
         self.referee_notes_by_set.clear()
+        self.k1_sequences.clear()
         self.active_scope = "ALL"
 
         # Default realistic set scores if none provided
@@ -489,7 +504,107 @@ class StudioSession:
         self.tactical._match_finished = (
             home_sets_won >= sets_needed or away_sets_won >= sets_needed
         )
+        self._seed_k1_sequences(valid_sets[: self.max_sets], rng)
         self.generate_ai_proposal()
+
+    def _seed_k1_sequences(
+        self, sets_info: List[Dict[str, int]], rng: random.Random
+    ) -> None:
+        """Populate realistic K1/K2 chained sequences for each set."""
+        rec_zones = [5, 5, 6, 6, 1]
+        in_sys_targets = [(6.0, 8.4), (5.5, 8.1), (4.6, 7.8), (6.5, 7.5)]
+        out_sys_targets = [(2.0, 3.8), (1.5, 4.2), (7.5, 4.0)]
+        atk_targets_by_zone: Dict[int, List[tuple[float, float]]] = {
+            4: [(1.2, 16.0), (7.6, 16.4), (7.2, 12.2), (2.8, 10.2)],
+            3: [(4.5, 15.2), (2.5, 13.0), (6.5, 13.2)],
+            2: [(7.8, 15.8), (1.4, 16.4), (1.8, 12.1), (6.8, 10.3)],
+            6: [(4.5, 16.2), (1.8, 15.5), (7.2, 15.5)],
+            1: [(7.6, 16.0), (1.8, 16.0)],
+        }
+        for s_info in sets_info:
+            s_num = int(s_info["set_num"])
+            for idx in range(14):
+                rot = Rotation((idx % 6) + 1)
+                r_zone = rng.choice(rec_zones)
+                r_orig = ZONE_CENTERS_HOME[r_zone]
+                is_ace = idx == 13 and rng.random() < 0.45
+                if is_ace:
+                    self.k1_sequences.append(
+                        RallyK1Sequence(
+                            set_number=s_num,
+                            rotation=rot,
+                            reception=ReceptionEvent(
+                                receptor_zone=r_zone,
+                                origin_xy=r_orig,
+                                target_xy=(8.5, 1.0),
+                                quality=ReceptionQuality.ERROR,
+                            ),
+                            side_out_won=False,
+                            timestamp_sec=float(s_num * 900 + idx * 25),
+                        )
+                    )
+                    continue
+
+                is_in = rng.random() < 0.68
+                r_target = rng.choice(in_sys_targets if is_in else out_sys_targets)
+                t_zone = (
+                    rng.choice([4, 3, 2, 6, 4, 3])
+                    if is_in
+                    else rng.choice([4, 2, 4, 6])
+                )
+                tempo = (
+                    SetTempo.FIRST
+                    if t_zone == 3 and is_in
+                    else (SetTempo.SECOND if is_in else SetTempo.THIRD)
+                )
+                blockers = rng.choice([0, 1, 1, 2]) if is_in else rng.choice([2, 2, 3])
+                a_target = rng.choice(atk_targets_by_zone[t_zone])
+                outcome = (
+                    rng.choice(
+                        [
+                            K1AttackOutcome.KILL,
+                            K1AttackOutcome.KILL,
+                            K1AttackOutcome.POSITIVE_CONT,
+                            K1AttackOutcome.ERROR,
+                        ]
+                    )
+                    if is_in
+                    else rng.choice(
+                        [
+                            K1AttackOutcome.KILL,
+                            K1AttackOutcome.POSITIVE_CONT,
+                            K1AttackOutcome.RECYCLE,
+                            K1AttackOutcome.BLOCKED,
+                            K1AttackOutcome.ERROR,
+                        ]
+                    )
+                )
+                self.k1_sequences.append(
+                    RallyK1Sequence(
+                        set_number=s_num,
+                        rotation=rot,
+                        reception=ReceptionEvent(
+                            receptor_zone=r_zone,
+                            origin_xy=r_orig,
+                            target_xy=r_target,
+                        ),
+                        setting=SetEvent(
+                            setter_origin_xy=r_target,
+                            target_zone=t_zone,
+                            tempo=tempo,
+                            quality=(
+                                SetQuality.SUCCESSFUL if is_in else SetQuality.IMPRECISE
+                            ),
+                        ),
+                        attack=K1AttackEvent(
+                            origin_zone=t_zone,
+                            target_xy=a_target,
+                            blockers_faced=blockers,
+                            outcome=outcome,
+                        ),
+                        timestamp_sec=float(s_num * 900 + idx * 25),
+                    )
+                )
 
     def sync_active_set_scoreboard(self) -> None:
         h_now, a_now = self.tactical.get_score()
@@ -610,6 +725,38 @@ class HybridDecisionRequest(BaseModel):
     hotkey: str
     corrected_zone: Optional[int] = None
     corrected_outcome: Optional[str] = None
+
+
+class K1ReceptionInput(BaseModel):
+    receptor_zone: int
+    origin_xy: tuple[float, float]
+    target_xy: tuple[float, float]
+    quality: Optional[str] = None
+
+
+class K1SetInput(BaseModel):
+    setter_origin_xy: tuple[float, float]
+    target_zone: int
+    tempo: str = "2nd"
+    quality: str = "SUCCESSFUL"
+
+
+class K1AttackInput(BaseModel):
+    origin_zone: int
+    target_xy: tuple[float, float]
+    blockers_faced: int = 2
+    trajectory_type: Optional[str] = None
+    outcome: str = "#"
+
+
+class K1RallyRequest(BaseModel):
+    set_number: Optional[int] = None
+    rotation: Optional[int] = None
+    timestamp_sec: float = 0.0
+    reception: K1ReceptionInput
+    setting: Optional[K1SetInput] = None
+    attack: Optional[K1AttackInput] = None
+    side_out_won: Optional[bool] = None
 
 
 def _serialize_state() -> Dict[str, Any]:
@@ -760,6 +907,9 @@ def _serialize_state() -> Dict[str, Any]:
         },
         "trajectories": filtered_trajectories,
         "recent_attacks": filtered_attacks,
+        "k1_stats": compute_k1_advanced_analytics(
+            SESSION.k1_sequences, set_number=set_filter
+        ),
         "ai_proposal": SESSION.current_proposal,
         "homography_matrix": SESSION.mapper.homography_matrix.round(4).tolist(),
     }
@@ -923,6 +1073,83 @@ def process_hybrid_tag(req: HybridDecisionRequest) -> Dict[str, Any]:
 
     SESSION.generate_ai_proposal()
     return _serialize_state()
+
+
+@app.get("/api/stats/k1-advanced")
+def get_k1_advanced_stats(set_number: Optional[int] = None) -> Dict[str, Any]:
+    return compute_k1_advanced_analytics(SESSION.k1_sequences, set_number=set_number)
+
+
+@app.post("/api/rallies/k1")
+def register_k1_rally(req: K1RallyRequest) -> Dict[str, Any]:
+    target_set = req.set_number if req.set_number is not None else SESSION.tactical.current_set
+    rot = (
+        Rotation(int(req.rotation))
+        if req.rotation is not None
+        else SESSION.tactical.get_rotation(TeamSide.HOME)
+    )
+
+    rec_quality = ReceptionQuality(req.reception.quality) if req.reception.quality else None
+    reception_ev = ReceptionEvent(
+        receptor_zone=req.reception.receptor_zone,
+        origin_xy=req.reception.origin_xy,
+        target_xy=req.reception.target_xy,
+        quality=rec_quality,
+    )
+
+    set_ev: Optional[SetEvent] = None
+    if req.setting is not None:
+        set_ev = SetEvent(
+            setter_origin_xy=req.setting.setter_origin_xy,
+            target_zone=req.setting.target_zone,
+            tempo=SetTempo(req.setting.tempo),
+            quality=SetQuality(req.setting.quality),
+        )
+
+    atk_ev: Optional[K1AttackEvent] = None
+    if req.attack is not None:
+        atk_ev = K1AttackEvent(
+            origin_zone=req.attack.origin_zone,
+            target_xy=req.attack.target_xy,
+            blockers_faced=req.attack.blockers_faced,
+            trajectory_type=(
+                req.attack.trajectory_type if req.attack.trajectory_type else None
+            ),
+            outcome=K1AttackOutcome(req.attack.outcome),
+        )
+
+    seq = RallyK1Sequence(
+        set_number=target_set,
+        rotation=rot,
+        reception=reception_ev,
+        setting=set_ev,
+        attack=atk_ev,
+        side_out_won=req.side_out_won,
+        timestamp_sec=req.timestamp_sec,
+    )
+    SESSION.k1_sequences.append(seq)
+    exported = SESSION.k1_exporter.export_sample(seq, timestamp_sec=req.timestamp_sec)
+
+    # Update tactical state if rally outcome is decisive
+    if seq.side_out_won is True:
+        if SESSION.tactical.match_finished:
+            SESSION.tactical._match_finished = False
+        SESSION.tactical.register_rally_point(TeamSide.HOME)
+    elif seq.attack is not None and seq.attack.outcome in (
+        K1AttackOutcome.ERROR,
+        K1AttackOutcome.BLOCKED,
+    ):
+        if SESSION.tactical.match_finished:
+            SESSION.tactical._match_finished = False
+        SESSION.tactical.register_rally_point(TeamSide.AWAY)
+    elif seq.reception.quality in (ReceptionQuality.ERROR, ReceptionQuality.OVERPASS):
+        if SESSION.tactical.match_finished:
+            SESSION.tactical._match_finished = False
+        SESSION.tactical.register_rally_point(TeamSide.AWAY)
+
+    state = _serialize_state()
+    state["exported_k1_sample"] = exported
+    return state
 
 
 @app.post("/api/reset")

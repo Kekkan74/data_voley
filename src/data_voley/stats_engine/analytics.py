@@ -8,7 +8,7 @@ player roles, with support for both per-set filtering and full-match aggregation
 
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from data_voley.domain.enums import (
     AttackOutcome,
@@ -21,6 +21,13 @@ from data_voley.domain.enums import (
 )
 from data_voley.domain.models import AttackEvent, CourtPoint2D, ServeEvent, SetActionEvent
 from data_voley.domain.ports import ITacticalStatePort
+from data_voley.tactical_state.k1_models import (
+    AttackTrajectory,
+    K1AttackOutcome,
+    RallyK1Sequence,
+    ReceptionQuality,
+    SetTempo,
+)
 
 SETTING_TARGET_LABELS_ES: Dict[CourtZone, str] = {
     CourtZone.Z4: "Hacia Zona 4 (Punta Izquierda / Receptor)",
@@ -465,3 +472,231 @@ class MatchStatsEngine:
             }
 
         return summary
+
+
+# ---------------------------------------------------------------------------
+# Pure K1/K2 Chained Analytics (Reception -> Setting -> Attack)
+# ---------------------------------------------------------------------------
+
+_K1_TARGET_ZONES: Tuple[int, ...] = (4, 3, 2, 6, 1, 5)
+_RECEPTION_ZONE_LABELS_ES: Dict[int, str] = {
+    5: "Z5 (Líbero)",
+    6: "Z6 (Pipe / Receptor Zaguero)",
+    1: "Z1 (Receptor / Opuesto)",
+    4: "Z4 (Punta Corta)",
+    3: "Z3 (Centro Corta)",
+    2: "Z2 (Derecha Corta)",
+}
+
+
+def _filter_k1_sequences(
+    sequences: Sequence[RallyK1Sequence], set_number: Optional[int]
+) -> List[RallyK1Sequence]:
+    if set_number is None:
+        return list(sequences)
+    return [s for s in sequences if s.set_number == set_number]
+
+
+def _calc_fivb_efficiency(attacks: Sequence[RallyK1Sequence]) -> Dict[str, Any]:
+    total = len(attacks)
+    if total == 0:
+        return {
+            "attempts": 0,
+            "kills": 0,
+            "errors": 0,
+            "blocked": 0,
+            "efficiency": 0.0,
+            "efficiency_pct": 0.0,
+        }
+    kills = sum(1 for s in attacks if s.attack and s.attack.outcome == K1AttackOutcome.KILL)
+    errors = sum(1 for s in attacks if s.attack and s.attack.outcome == K1AttackOutcome.ERROR)
+    blocked = sum(1 for s in attacks if s.attack and s.attack.outcome == K1AttackOutcome.BLOCKED)
+    eff = round((kills - errors - blocked) / total, 4)
+    return {
+        "attempts": total,
+        "kills": kills,
+        "errors": errors,
+        "blocked": blocked,
+        "efficiency": eff,
+        "efficiency_pct": round(eff * 100.0, 1),
+    }
+
+
+def compute_setter_distribution(
+    sequences: Sequence[RallyK1Sequence], set_number: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Compute conditioned setter distribution (In-System '#'/'+' vs Out-of-System '-'/'!')
+    across target zones and Setter Advantage Rate (blockers_faced <= 1).
+    """
+    filtered = _filter_k1_sequences(sequences, set_number)
+
+    def _bucket(items: List[RallyK1Sequence]) -> Dict[str, Any]:
+        total = len(items)
+        zones: Dict[str, Dict[str, Any]] = {}
+        for z in _K1_TARGET_ZONES:
+            cnt = sum(1 for s in items if s.setting and s.setting.target_zone == z)
+            zones[f"Z{z}"] = {
+                "count": cnt,
+                "pct": round((cnt / total) * 100.0, 1) if total > 0 else 0.0,
+            }
+        return {"total": total, "zones": zones}
+
+    in_sys = [
+        s
+        for s in filtered
+        if s.setting is not None
+        and s.reception.quality in (ReceptionQuality.PERFECT, ReceptionQuality.POSITIVE)
+    ]
+    out_sys = [
+        s
+        for s in filtered
+        if s.setting is not None
+        and s.reception.quality in (ReceptionQuality.NEGATIVE, ReceptionQuality.MEDIUM)
+    ]
+
+    with_attack = [s for s in filtered if s.attack is not None]
+    advantage_cnt = sum(
+        1 for s in with_attack if s.attack is not None and s.attack.blockers_faced <= 1
+    )
+    advantage_rate = (
+        round((advantage_cnt / len(with_attack)) * 100.0, 1) if with_attack else 0.0
+    )
+
+    return {
+        "in_system": _bucket(in_sys),
+        "out_of_system": _bucket(out_sys),
+        "setter_advantage_rate_pct": advantage_rate,
+        "advantage_attacks": advantage_cnt,
+        "total_attacks_with_block_info": len(with_attack),
+    }
+
+
+def compute_reception_and_sideout_by_rotation(
+    sequences: Sequence[RallyK1Sequence], set_number: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Compute Reception Positive % ('#' + '+'), Reception Efficiency ((# + + - =) / Total),
+    and 1st-attempt Side-Out % broken down by reception zone and rotation (R1-R6).
+    """
+    filtered = _filter_k1_sequences(sequences, set_number)
+
+    def _rec_metrics(items: List[RallyK1Sequence]) -> Dict[str, Any]:
+        total = len(items)
+        if total == 0:
+            return {
+                "total": 0,
+                "perfect": 0,
+                "positive": 0,
+                "errors": 0,
+                "positive_pct": 0.0,
+                "efficiency_pct": 0.0,
+                "side_out_won": 0,
+                "side_out_pct": 0.0,
+            }
+        perf = sum(1 for s in items if s.reception.quality == ReceptionQuality.PERFECT)
+        pos = sum(1 for s in items if s.reception.quality == ReceptionQuality.POSITIVE)
+        err = sum(1 for s in items if s.reception.quality == ReceptionQuality.ERROR)
+        so_won = sum(1 for s in items if s.side_out_won)
+        return {
+            "total": total,
+            "perfect": perf,
+            "positive": pos,
+            "errors": err,
+            "positive_pct": round(((perf + pos) / total) * 100.0, 1),
+            "efficiency_pct": round(((perf + pos - err) / total) * 100.0, 1),
+            "side_out_won": so_won,
+            "side_out_pct": round((so_won / total) * 100.0, 1),
+        }
+
+    by_zone: Dict[str, Dict[str, Any]] = {}
+    for z in (5, 6, 1, 4, 3, 2):
+        z_items = [s for s in filtered if s.reception.receptor_zone == z]
+        by_zone[f"Z{z}"] = {
+            "label": _RECEPTION_ZONE_LABELS_ES[z],
+            **_rec_metrics(z_items),
+        }
+
+    by_rotation: Dict[str, Dict[str, Any]] = {}
+    for rot in Rotation:
+        r_items = [s for s in filtered if s.rotation == rot]
+        by_rotation[rot.name] = _rec_metrics(r_items)
+
+    return {
+        "overall": _rec_metrics(filtered),
+        "by_zone": by_zone,
+        "by_rotation": by_rotation,
+    }
+
+
+def compute_attack_efficiency_and_directions(
+    sequences: Sequence[RallyK1Sequence], set_number: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Compute FIVB attack efficiency ((Kills - Errors - Blocked) / Total) by zone,
+    tempo, trajectory direction, and correlation with reception quality (#/+ vs -).
+    """
+    filtered = [s for s in _filter_k1_sequences(sequences, set_number) if s.attack is not None]
+    overall = _calc_fivb_efficiency(filtered)
+
+    by_zone: Dict[str, Dict[str, Any]] = {}
+    for z in (4, 3, 2, 6, 1):
+        z_items = [s for s in filtered if s.attack and s.attack.origin_zone == z]
+        by_zone[f"Z{z}"] = _calc_fivb_efficiency(z_items)
+
+    by_tempo: Dict[str, Dict[str, Any]] = {}
+    for tempo in SetTempo:
+        t_items = [s for s in filtered if s.setting and s.setting.tempo == tempo]
+        by_tempo[tempo.value] = _calc_fivb_efficiency(t_items)
+
+    by_trajectory: Dict[str, Dict[str, Any]] = {}
+    for traj in AttackTrajectory:
+        tr_items = [s for s in filtered if s.attack and s.attack.trajectory_type == traj]
+        by_trajectory[traj.value] = _calc_fivb_efficiency(tr_items)
+
+    in_sys_atks = [
+        s
+        for s in filtered
+        if s.reception.quality in (ReceptionQuality.PERFECT, ReceptionQuality.POSITIVE)
+    ]
+    neg_rec_atks = [
+        s for s in filtered if s.reception.quality == ReceptionQuality.NEGATIVE
+    ]
+
+    in_eff = _calc_fivb_efficiency(in_sys_atks)
+    neg_eff = _calc_fivb_efficiency(neg_rec_atks)
+
+    return {
+        "total_attacks": overall["attempts"],
+        "overall_efficiency": overall["efficiency"],
+        "overall_efficiency_pct": overall["efficiency_pct"],
+        "overall": overall,
+        "by_zone": by_zone,
+        "by_tempo": by_tempo,
+        "by_trajectory": by_trajectory,
+        "correlation_reception_to_attack": {
+            "in_system_efficiency": in_eff["efficiency"],
+            "in_system_efficiency_pct": in_eff["efficiency_pct"],
+            "in_system_attempts": in_eff["attempts"],
+            "out_of_system_efficiency": neg_eff["efficiency"],
+            "out_of_system_efficiency_pct": neg_eff["efficiency_pct"],
+            "out_of_system_attempts": neg_eff["attempts"],
+        },
+    }
+
+
+def compute_k1_advanced_analytics(
+    sequences: Sequence[RallyK1Sequence], set_number: Optional[int] = None
+) -> Dict[str, Any]:
+    """Return all K1/K2 advanced metrics (Setter, Reception/Side-Out, Attack)."""
+    return {
+        "set_filter": set_number,
+        "total_k1_rallies": len(_filter_k1_sequences(sequences, set_number)),
+        "setter_distribution": compute_setter_distribution(sequences, set_number=set_number),
+        "reception_performance": compute_reception_and_sideout_by_rotation(
+            sequences, set_number=set_number
+        ),
+        "attack_efficiency": compute_attack_efficiency_and_directions(
+            sequences, set_number=set_number
+        ),
+    }
