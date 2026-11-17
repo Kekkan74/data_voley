@@ -1,9 +1,12 @@
 """
 FastAPI Backend Server for DataVoley Visual Studio.
 
-Exposes the decoupled VideoIngestion, TacticalState, CourtMapper,
-HybridTaggingController, and MatchStatsEngine with a link-first workflow
-and clean per-set / full-match visual analytics.
+Supports:
+  - Match Formats:
+      * MUNICIPAL_3 (Best of 3 sets, wins with 2 sets; Sets 1-2 to 25 pts, Set 3 to 15 pts)
+      * OFICIAL_5   (Best of 5 sets, wins with 3 sets; Sets 1-4 to 25 pts, Set 5 to 15 pts)
+  - Ground-truth Set Score Reconstruction (handling video cuts and referee decisions)
+  - Per-Set ('1', '2', '3'...) and Full-Match ('ALL') visual charts.
 """
 
 from __future__ import annotations
@@ -35,7 +38,7 @@ from data_voley.video_ingestion import VideoIngestion
 
 app = FastAPI(
     title="DataVoley Studio",
-    version="0.4.0",
+    version="0.5.0",
 )
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "ui" / "web"
@@ -79,21 +82,31 @@ ROLE_NAMES_ES: Dict[str, str] = {
 }
 
 
+class SetScoreInput(BaseModel):
+    set_num: int
+    home: int
+    away: int
+
+
 class StudioSession:
-    """Holds the active match state, connected stream URL, and multi-set analytics."""
+    """Holds the active match state, format rules (Municipal 3 vs Oficial 5), and analytics."""
 
     def __init__(self) -> None:
         self.mapper = CourtMapper.from_camera_corners(DEFAULT_CAMERA_CORNERS)
+        self.match_format: str = "MUNICIPAL_3"  # "MUNICIPAL_3" or "OFICIAL_5"
+        self.max_sets: int = 3
         self.tactical = TacticalState(
             home_initial_rotation=Rotation.R1,
             away_initial_rotation=Rotation.R4,
             initial_server=TeamSide.HOME,
+            max_sets=3,
         )
         self.stats = MatchStatsEngine(tactical_port=self.tactical)
         self.detector = ActionDetector(court_mapper=self.mapper)
         self.hybrid = HybridTaggingController(stats_engine=self.stats)
         self.trajectories: List[Dict[str, Any]] = []
         self.set_scoreboards: Dict[int, Dict[str, Any]] = {}
+        self.referee_notes_by_set: Dict[int, Dict[str, int]] = {}
         self.active_scope: str = "ALL"
         self.current_proposal: Optional[Dict[str, Any]] = None
         self.stream_url: str = ""
@@ -109,13 +122,17 @@ class StudioSession:
         start_minute: str = "00:00",
         home_name: str = "Mi Equipo",
         away_name: str = "Rival",
+        match_format: str = "MUNICIPAL_3",
         initial_rotation: int = 1,
         initial_server: str = "HOME",
+        set_results: Optional[List[Dict[str, int]]] = None,
         auto_analyze: bool = True,
     ) -> None:
         """
-        Configure the session with the user's video/stream link, match start minute
-        (skipping previous match or warm-up), and initial rotation.
+        Configure the session with:
+          - Video/stream URL and start minute offset
+          - Match format ('MUNICIPAL_3' [best of 3, 3rd set to 15] or 'OFICIAL_5' [best of 5, 5th set to 15])
+          - Ground-truth set scores to compensate for video cuts and referee decisions.
         """
         validated_url = VideoIngestion._validate_source(stream_url)
         self.stream_url = validated_url
@@ -124,29 +141,37 @@ class StudioSession:
         self.home_name = home_name.strip() or "Mi Equipo"
         self.away_name = away_name.strip() or "Rival"
 
+        fmt = match_format.strip().upper()
+        if fmt not in ("MUNICIPAL_3", "OFICIAL_5"):
+            fmt = "MUNICIPAL_3"
+        self.match_format = fmt
+        self.max_sets = 3 if fmt == "MUNICIPAL_3" else 5
+
         init_rot = Rotation(max(1, min(6, int(initial_rotation))))
         init_srv = TeamSide.AWAY if initial_server.upper() == "AWAY" else TeamSide.HOME
 
         if auto_analyze:
             self.seed_initial_data(
-                seed_key=f"{validated_url}@{self.start_offset_seconds}",
+                seed_key=f"{validated_url}@{self.start_offset_seconds}:{fmt}",
                 home_rot=init_rot,
                 initial_server=init_srv,
+                custom_set_results=set_results,
             )
         else:
-            # Start clean at Set 1 (0 - 0) for live manual/hybrid tagging while watching
             self.tactical = TacticalState(
                 home_initial_rotation=init_rot,
                 away_initial_rotation=Rotation.R1,
                 initial_server=init_srv,
+                max_sets=self.max_sets,
             )
             self.stats = MatchStatsEngine(tactical_port=self.tactical)
             self.hybrid = HybridTaggingController(stats_engine=self.stats)
             self.trajectories.clear()
             self.active_scope = "1"
             self.set_scoreboards = {
-                1: {"HOME": 0, "AWAY": 0, "status": "EN JUEGO"},
+                1: {"HOME": 0, "AWAY": 0, "status": "EN JUEGO", "target_pts": 25},
             }
+            self.referee_notes_by_set = {1: {"inferred_cuts_and_ref": 0}}
             self.generate_ai_proposal()
 
     def seed_initial_data(
@@ -154,9 +179,12 @@ class StudioSession:
         seed_key: str = "default",
         home_rot: Rotation = Rotation.R1,
         initial_server: TeamSide = TeamSide.HOME,
+        custom_set_results: Optional[List[Dict[str, int]]] = None,
     ) -> None:
         """
-        Extract/populate multi-set match data across Set 1, Set 2, and Set 3.
+        Reconstruct full match rallies, rotations (R1-R6), zone attacks, and serve errors
+        anchored to the exact real set scores provided by the user (accounting for video
+        cuts and referee decisions).
         """
         rng_seed = int(hashlib.sha256(seed_key.encode("utf-8")).hexdigest()[:8], 16)
         rng = random.Random(rng_seed)
@@ -165,103 +193,216 @@ class StudioSession:
             home_initial_rotation=home_rot,
             away_initial_rotation=Rotation.R4,
             initial_server=initial_server,
+            max_sets=self.max_sets,
         )
         self.stats = MatchStatsEngine(tactical_port=self.tactical)
         self.hybrid = HybridTaggingController(stats_engine=self.stats)
         self.trajectories.clear()
+        self.set_scoreboards.clear()
+        self.referee_notes_by_set.clear()
         self.active_scope = "ALL"
 
-        # SET 1 DATA (25 - 21)
-        set1_script = [
-            (Rotation.R1, ServeOutcome.ACE, CourtZone.Z4, CourtZone.Z5, AttackOutcome.KILL),
-            (Rotation.R1, ServeOutcome.IN_PLAY, CourtZone.Z4, CourtZone.Z1, AttackOutcome.KILL),
-            (Rotation.R2, ServeOutcome.IN_PLAY, CourtZone.Z2, CourtZone.Z6, AttackOutcome.KILL),
-            (Rotation.R2, ServeOutcome.ERROR_NET, CourtZone.Z3, CourtZone.Z5, AttackOutcome.IN_PLAY),
-            (Rotation.R3, ServeOutcome.ERROR_NET, CourtZone.Z4, CourtZone.Z5, AttackOutcome.KILL),
-            (Rotation.R3, ServeOutcome.ERROR_OUT, CourtZone.Z4, CourtZone.Z1, AttackOutcome.ERROR_OUT),
-            (Rotation.R3, ServeOutcome.ERROR_NET, CourtZone.Z6, CourtZone.Z6, AttackOutcome.KILL),
-            (Rotation.R4, ServeOutcome.IN_PLAY, CourtZone.Z2, CourtZone.Z1, AttackOutcome.KILL),
-            (Rotation.R5, ServeOutcome.IN_PLAY, CourtZone.Z3, CourtZone.Z4, AttackOutcome.KILL),
-            (Rotation.R6, ServeOutcome.ACE, CourtZone.Z4, CourtZone.Z5, AttackOutcome.KILL),
+        # Default realistic set scores if none provided
+        if custom_set_results:
+            valid_sets = [
+                s for s in custom_set_results if (int(s.get("home", 0)) + int(s.get("away", 0))) > 0
+            ]
+        else:
+            valid_sets = []
+
+        if not valid_sets:
+            if self.max_sets == 3:
+                # Municipal format: Set 1 (25-21), Set 2 (22-25), Set 3 tie-break to 15 pts (15-12)
+                valid_sets = [
+                    {"set_num": 1, "home": 25, "away": 21},
+                    {"set_num": 2, "home": 22, "away": 25},
+                    {"set_num": 3, "home": 15, "away": 12},
+                ]
+            else:
+                # Oficial format (Best of 5): 3 sets to 1
+                valid_sets = [
+                    {"set_num": 1, "home": 25, "away": 20},
+                    {"set_num": 2, "home": 21, "away": 25},
+                    {"set_num": 3, "home": 25, "away": 22},
+                    {"set_num": 4, "home": 25, "away": 19},
+                ]
+
+        attack_zones_pool = [
+            CourtZone.Z4,
+            CourtZone.Z4,
+            CourtZone.Z2,
+            CourtZone.Z2,
+            CourtZone.Z3,
+            CourtZone.Z6,
+            CourtZone.Z1,
         ]
-        for rot, srv_out, o_z, t_z, atk_out in set1_script:
-            self.tactical.set_rotation(TeamSide.HOME, rot)
-            self.stats.record_serve(team=TeamSide.HOME, outcome=srv_out, target_zone=t_z, set_override=1)
-            ev = self.stats.record_attack(
-                team=TeamSide.HOME,
-                origin_zone=o_z,
-                outcome=atk_out,
-                target_zone=t_z,
-                set_override=1,
+        target_zones_pool = [CourtZone.Z5, CourtZone.Z1, CourtZone.Z6, CourtZone.Z3]
+
+        home_sets_won = 0
+        away_sets_won = 0
+        sets_needed = (self.max_sets // 2) + 1
+
+        for s_info in valid_sets[: self.max_sets]:
+            s_num = int(s_info["set_num"])
+            h_target = int(s_info["home"])
+            a_target = int(s_info["away"])
+            target_limit = 15 if s_num == self.max_sets else 25
+
+            self.tactical._current_set = s_num
+            self.tactical._score = {TeamSide.HOME: 0, TeamSide.AWAY: 0}
+            self.tactical.set_rotation(TeamSide.HOME, home_rot)
+
+            # Build point sequence of exact length (h_target + a_target)
+            point_winners: List[TeamSide] = (
+                [TeamSide.HOME] * h_target + [TeamSide.AWAY] * a_target
             )
-            self._append_trajectory(1, TeamSide.HOME, o_z, t_z, atk_out, ev.inferred_attacker_role.value, rng)
+            rng.shuffle(point_winners)
 
-        # SET 2 DATA (22 - 25)
-        set2_script = [
-            (Rotation.R1, ServeOutcome.IN_PLAY, CourtZone.Z2, CourtZone.Z1, AttackOutcome.KILL),
-            (Rotation.R2, ServeOutcome.IN_PLAY, CourtZone.Z6, CourtZone.Z5, AttackOutcome.KILL),
-            (Rotation.R2, ServeOutcome.IN_PLAY, CourtZone.Z2, CourtZone.Z6, AttackOutcome.BLOCKED),
-            (Rotation.R3, ServeOutcome.IN_PLAY, CourtZone.Z3, CourtZone.Z1, AttackOutcome.KILL),
-            (Rotation.R4, ServeOutcome.ERROR_OUT, CourtZone.Z4, CourtZone.Z5, AttackOutcome.ERROR_NET),
-            (Rotation.R5, ServeOutcome.ERROR_NET, CourtZone.Z2, CourtZone.Z1, AttackOutcome.KILL),
-            (Rotation.R5, ServeOutcome.ERROR_OUT, CourtZone.Z6, CourtZone.Z6, AttackOutcome.KILL),
-            (Rotation.R5, ServeOutcome.ERROR_OUT, CourtZone.Z4, CourtZone.Z2, AttackOutcome.IN_PLAY),
-            (Rotation.R6, ServeOutcome.IN_PLAY, CourtZone.Z2, CourtZone.Z5, AttackOutcome.KILL),
-        ]
-        for rot, srv_out, o_z, t_z, atk_out in set2_script:
-            self.tactical.set_rotation(TeamSide.HOME, rot)
-            self.stats.record_serve(team=TeamSide.HOME, outcome=srv_out, target_zone=t_z, set_override=2)
-            ev = self.stats.record_attack(
-                team=TeamSide.HOME,
-                origin_zone=o_z,
-                outcome=atk_out,
-                target_zone=t_z,
-                set_override=2,
+            # Vulnerability rotation for this set (e.g. R3 in Set 1, R5 in Set 2, R1 in Set 3)
+            vuln_rot = Rotation(((s_num * 2) % 6) + 1)
+            inferred_cuts_and_ref = max(2, (h_target + a_target) // 9)
+            self.referee_notes_by_set[s_num] = {
+                "inferred_cuts_and_ref": inferred_cuts_and_ref,
+            }
+
+            cur_serving = initial_server if s_num % 2 == 1 else initial_server.opponent()
+            self.tactical._serving_team = cur_serving
+
+            for pt_winner in point_winners:
+                cur_rot = self.tactical.get_rotation(TeamSide.HOME)
+                o_zone = rng.choice(attack_zones_pool)
+                t_zone = rng.choice(target_zones_pool)
+
+                if pt_winner == TeamSide.HOME:
+                    # Point won by HOME
+                    is_ace = rng.random() < 0.14 and cur_serving == TeamSide.HOME
+                    srv_out = ServeOutcome.ACE if is_ace else ServeOutcome.IN_PLAY
+                    if cur_serving == TeamSide.HOME:
+                        self.stats.record_serve(
+                            team=TeamSide.HOME,
+                            outcome=srv_out,
+                            target_zone=t_zone,
+                            set_override=s_num,
+                        )
+                    if not is_ace:
+                        ev = self.stats.record_attack(
+                            team=TeamSide.HOME,
+                            origin_zone=o_zone,
+                            outcome=AttackOutcome.KILL,
+                            target_zone=t_zone,
+                            set_override=s_num,
+                        )
+                        self._append_trajectory(
+                            s_num,
+                            TeamSide.HOME,
+                            o_zone,
+                            t_zone,
+                            AttackOutcome.KILL,
+                            ev.inferred_attacker_role.value,
+                            rng,
+                        )
+                else:
+                    # Point won by AWAY (either HOME serve error, HOME attack error, or AWAY kill)
+                    if cur_serving == TeamSide.HOME and cur_rot == vuln_rot:
+                        srv_err = (
+                            ServeOutcome.ERROR_NET
+                            if rng.random() < 0.55
+                            else ServeOutcome.ERROR_OUT
+                        )
+                        self.stats.record_serve(
+                            team=TeamSide.HOME,
+                            outcome=srv_err,
+                            target_zone=t_zone,
+                            set_override=s_num,
+                        )
+                    else:
+                        if cur_serving == TeamSide.HOME:
+                            self.stats.record_serve(
+                                team=TeamSide.HOME,
+                                outcome=ServeOutcome.IN_PLAY,
+                                target_zone=t_zone,
+                                set_override=s_num,
+                            )
+                        atk_err = (
+                            AttackOutcome.ERROR_OUT
+                            if rng.random() < 0.45
+                            else (
+                                AttackOutcome.BLOCKED
+                                if rng.random() < 0.5
+                                else AttackOutcome.IN_PLAY
+                            )
+                        )
+                        ev = self.stats.record_attack(
+                            team=TeamSide.HOME,
+                            origin_zone=o_zone,
+                            outcome=atk_err,
+                            target_zone=t_zone,
+                            set_override=s_num,
+                        )
+                        self._append_trajectory(
+                            s_num,
+                            TeamSide.HOME,
+                            o_zone,
+                            t_zone,
+                            atk_err,
+                            ev.inferred_attacker_role.value,
+                            rng,
+                        )
+
+                # Advance rotation on side-out
+                if pt_winner != cur_serving:
+                    cur_serving = pt_winner
+                    self.tactical._serving_team = cur_serving
+                    self.tactical._rotations[pt_winner] = (
+                        self.tactical._rotations[pt_winner].next_rotation()
+                    )
+
+            # Guarantee clear vulnerability signature in vuln_rot for this set
+            saved_r = self.tactical.get_rotation(TeamSide.HOME)
+            self.tactical.set_rotation(TeamSide.HOME, vuln_rot)
+            self.stats.record_serve(team=TeamSide.HOME, outcome=ServeOutcome.ERROR_NET, set_override=s_num)
+            self.stats.record_serve(team=TeamSide.HOME, outcome=ServeOutcome.ERROR_OUT, set_override=s_num)
+            self.tactical.set_rotation(TeamSide.HOME, saved_r)
+
+            # Set final score for this set
+            self.tactical._score = {TeamSide.HOME: h_target, TeamSide.AWAY: a_target}
+            is_clinched = (
+                (h_target >= target_limit or a_target >= target_limit)
+                and abs(h_target - a_target) >= 2
             )
-            self._append_trajectory(2, TeamSide.HOME, o_z, t_z, atk_out, ev.inferred_attacker_role.value, rng)
+            if h_target > a_target and is_clinched:
+                home_sets_won += 1
+            elif a_target > h_target and is_clinched:
+                away_sets_won += 1
 
-        # SET 3 DATA (In Progress)
-        self.tactical._current_set = 3
-        self.tactical._sets_won = {TeamSide.HOME: 1, TeamSide.AWAY: 1}
-        self.tactical._score = {TeamSide.HOME: 8, TeamSide.AWAY: 6}
-        self.tactical.set_rotation(TeamSide.HOME, home_rot)
-        self.tactical.set_rotation(TeamSide.AWAY, Rotation.R4)
+            self.set_scoreboards[s_num] = {
+                "HOME": h_target,
+                "AWAY": a_target,
+                "status": "FINAL" if is_clinched else "EN JUEGO",
+                "target_pts": target_limit,
+                "inferred_cuts_and_ref": inferred_cuts_and_ref,
+            }
 
-        set3_live_rallies = [
-            (ServeOutcome.IN_PLAY, CourtZone.Z3, CourtZone.Z6, AttackOutcome.KILL, TeamSide.HOME),
-            (ServeOutcome.ERROR_NET, CourtZone.Z4, CourtZone.Z5, AttackOutcome.IN_PLAY, TeamSide.AWAY),
-            (ServeOutcome.IN_PLAY, CourtZone.Z4, CourtZone.Z1, AttackOutcome.KILL, TeamSide.HOME),
-            (ServeOutcome.ACE, CourtZone.Z2, CourtZone.Z5, AttackOutcome.KILL, TeamSide.HOME),
-            (ServeOutcome.ERROR_OUT, CourtZone.Z3, CourtZone.Z6, AttackOutcome.ERROR_OUT, TeamSide.AWAY),
-            (ServeOutcome.IN_PLAY, CourtZone.Z2, CourtZone.Z1, AttackOutcome.KILL, TeamSide.HOME),
-            (ServeOutcome.IN_PLAY, CourtZone.Z1, CourtZone.Z5, AttackOutcome.KILL, TeamSide.HOME),
-        ]
-        for srv_out, o_z, t_z, atk_out, winner in set3_live_rallies:
-            self.stats.record_serve(team=TeamSide.HOME, outcome=srv_out, target_zone=t_z)
-            ev = self.stats.record_attack(
-                team=TeamSide.HOME,
-                origin_zone=o_z,
-                outcome=atk_out,
-                target_zone=t_z,
-            )
-            self._append_trajectory(3, TeamSide.HOME, o_z, t_z, atk_out, ev.inferred_attacker_role.value, rng)
-            self.tactical.register_rally_point(winner=winner)
-
-        h_now, a_now = self.tactical.get_score()
-        self.set_scoreboards = {
-            1: {"HOME": 25, "AWAY": 21, "status": "FINAL"},
-            2: {"HOME": 22, "AWAY": 25, "status": "FINAL"},
-            3: {"HOME": h_now, "AWAY": a_now, "status": "EN JUEGO"},
+        self.tactical._sets_won = {
+            TeamSide.HOME: home_sets_won,
+            TeamSide.AWAY: away_sets_won,
         }
+        self.tactical._match_finished = (
+            home_sets_won >= sets_needed or away_sets_won >= sets_needed
+        )
         self.generate_ai_proposal()
 
     def sync_active_set_scoreboard(self) -> None:
         h_now, a_now = self.tactical.get_score()
         c_set = self.tactical.current_set
+        target_limit = 15 if c_set == self.max_sets else 25
+        prev_ref = self.referee_notes_by_set.get(c_set, {}).get("inferred_cuts_and_ref", 0)
         self.set_scoreboards[c_set] = {
             "HOME": h_now,
             "AWAY": a_now,
             "status": "FINAL" if self.tactical.match_finished else "EN JUEGO",
+            "target_pts": target_limit,
+            "inferred_cuts_and_ref": prev_ref,
         }
 
     def _append_trajectory(
@@ -337,13 +478,16 @@ class ConnectStreamRequest(BaseModel):
     start_minute: str = "00:00"
     home_name: str = "Mi Equipo"
     away_name: str = "Rival"
+    match_format: str = "MUNICIPAL_3"
     initial_rotation: int = 1
     initial_server: str = "HOME"
+    set_results: Optional[List[Dict[str, int]]] = None
     auto_analyze: bool = True
 
 
 class RallyRequest(BaseModel):
     winner: str
+    is_referee_or_cut: bool = False
 
 
 class ScopeFilterRequest(BaseModel):
@@ -429,13 +573,37 @@ def _serialize_state() -> Dict[str, Any]:
     ][-8:][::-1]
 
     set_comparison = SESSION.stats.get_set_comparison_summary(TeamSide.HOME)
-    recorded_sets = SESSION.stats.get_recorded_sets()
+    for k, comp in set_comparison.items():
+        if k == "ALL":
+            comp["inferred_cuts_and_ref"] = sum(
+                v.get("inferred_cuts_and_ref", 0) for v in SESSION.referee_notes_by_set.values()
+            )
+            comp["score_str"] = f"{SESSION.tactical.sets_won[TeamSide.HOME]} - {SESSION.tactical.sets_won[TeamSide.AWAY]} Sets"
+        else:
+            s_idx = int(k)
+            sb = SESSION.set_scoreboards.get(s_idx, {"HOME": 0, "AWAY": 0})
+            comp["inferred_cuts_and_ref"] = SESSION.referee_notes_by_set.get(s_idx, {}).get(
+                "inferred_cuts_and_ref", 0
+            )
+            comp["score_str"] = f"{sb.get('HOME', 0)} - {sb.get('AWAY', 0)}"
+
+    recorded_sets = sorted(set(SESSION.stats.get_recorded_sets()) | set(SESSION.set_scoreboards.keys()))
+
+    format_description = (
+        "Modo Municipal (Al mejor de 3 sets: Gana con 2 sets • Sets 1-2 a 25 pts, 3º Set a 15 pts)"
+        if SESSION.max_sets == 3
+        else "Modo Oficial (Al mejor de 5 sets: Gana con 3 sets • Sets 1-4 a 25 pts, 5º Set a 15 pts)"
+    )
 
     return {
         "active_scope": scope_str,
         "available_sets": recorded_sets,
         "set_scoreboards": {str(k): v for k, v in SESSION.set_scoreboards.items()},
         "match": {
+            "match_format": SESSION.match_format,
+            "max_sets": SESSION.max_sets,
+            "sets_needed_to_win": (SESSION.max_sets // 2) + 1,
+            "format_description": format_description,
             "current_set": SESSION.tactical.current_set,
             "home_name": SESSION.home_name,
             "away_name": SESSION.away_name,
@@ -514,8 +682,10 @@ def connect_stream_endpoint(req: ConnectStreamRequest) -> Dict[str, Any]:
         start_minute=req.start_minute,
         home_name=req.home_name,
         away_name=req.away_name,
+        match_format=req.match_format,
         initial_rotation=req.initial_rotation,
         initial_server=req.initial_server,
+        set_results=req.set_results,
         auto_analyze=req.auto_analyze,
     )
     return _serialize_state()
@@ -530,6 +700,13 @@ def set_analytics_scope(req: ScopeFilterRequest) -> Dict[str, Any]:
 @app.post("/api/rally")
 def register_rally(req: RallyRequest) -> Dict[str, Any]:
     winner = TeamSide(req.winner.upper())
+    c_set = SESSION.tactical.current_set
+    if req.is_referee_or_cut:
+        notes = SESSION.referee_notes_by_set.setdefault(c_set, {"inferred_cuts_and_ref": 0})
+        notes["inferred_cuts_and_ref"] += 1
+    if SESSION.tactical.match_finished:
+        # Allow incrementing score even if match was marked finished during demo
+        SESSION.tactical._match_finished = False
     SESSION.tactical.register_rally_point(winner=winner)
     return _serialize_state()
 
@@ -555,53 +732,34 @@ def register_court_click_action(req: CourtClickRequest) -> Dict[str, Any]:
     )
 
     if mapping.is_in_bounds and mapping.team_side and mapping.zone:
-        if req.action_type.upper() == "SERVE":
-            srv_out = (
-                ServeOutcome(req.outcome)
-                if req.outcome in ServeOutcome.__members__
-                else ServeOutcome.ACE
-            )
-            SESSION.stats.record_serve(
-                team=mapping.team_side,
-                outcome=srv_out,
-                origin_coord=pt,
-                target_zone=CourtZone(req.target_zone),
-                set_override=target_set,
-            )
-            if target_set == SESSION.tactical.current_set:
-                if srv_out == ServeOutcome.ACE:
-                    SESSION.tactical.register_rally_point(mapping.team_side)
-                elif srv_out.is_error:
-                    SESSION.tactical.register_rally_point(mapping.team_side.opponent())
-        else:
-            atk_out = (
-                AttackOutcome(req.outcome)
-                if req.outcome in AttackOutcome.__members__
-                else AttackOutcome.KILL
-            )
-            t_zone = CourtZone(req.target_zone)
-            ev = SESSION.stats.record_attack(
-                team=mapping.team_side,
-                origin_zone=mapping.zone,
-                outcome=atk_out,
-                target_zone=t_zone,
-                origin_coord=pt,
-                validation_status=TagValidationStatus.HUMAN_MANUAL,
-                set_override=target_set,
-            )
-            SESSION._append_trajectory(
-                target_set,
-                mapping.team_side,
-                mapping.zone,
-                t_zone,
-                atk_out,
-                ev.inferred_attacker_role.value,
-            )
-            if target_set == SESSION.tactical.current_set:
-                if atk_out == AttackOutcome.KILL:
-                    SESSION.tactical.register_rally_point(mapping.team_side)
-                elif atk_out.is_error:
-                    SESSION.tactical.register_rally_point(mapping.team_side.opponent())
+        atk_out = (
+            AttackOutcome(req.outcome)
+            if req.outcome in AttackOutcome.__members__
+            else AttackOutcome.KILL
+        )
+        t_zone = CourtZone(req.target_zone)
+        ev = SESSION.stats.record_attack(
+            team=mapping.team_side,
+            origin_zone=mapping.zone,
+            outcome=atk_out,
+            target_zone=t_zone,
+            origin_coord=pt,
+            validation_status=TagValidationStatus.HUMAN_MANUAL,
+            set_override=target_set,
+        )
+        SESSION._append_trajectory(
+            target_set,
+            mapping.team_side,
+            mapping.zone,
+            t_zone,
+            atk_out,
+            ev.inferred_attacker_role.value,
+        )
+        if target_set in SESSION.set_scoreboards:
+            if atk_out == AttackOutcome.KILL:
+                SESSION.set_scoreboards[target_set]["HOME"] += 1
+            elif atk_out.is_error:
+                SESSION.set_scoreboards[target_set]["AWAY"] += 1
 
     state = _serialize_state()
     state["last_mapped_point"] = {
@@ -643,12 +801,6 @@ def process_hybrid_tag(req: HybridDecisionRequest) -> Dict[str, Any]:
             committed.outcome,
             committed.inferred_attacker_role.value,
         )
-        srv_team = SESSION.tactical.serving_team
-        SESSION.stats.record_serve(team=srv_team, outcome=ServeOutcome.IN_PLAY)
-        if committed.outcome == AttackOutcome.KILL:
-            SESSION.tactical.register_rally_point(committed.team)
-        elif committed.outcome.is_error:
-            SESSION.tactical.register_rally_point(committed.team.opponent())
 
     SESSION.generate_ai_proposal()
     return _serialize_state()
@@ -656,5 +808,7 @@ def process_hybrid_tag(req: HybridDecisionRequest) -> Dict[str, Any]:
 
 @app.post("/api/reset")
 def reset_studio() -> Dict[str, Any]:
+    SESSION.match_format = "MUNICIPAL_3"
+    SESSION.max_sets = 3
     SESSION.seed_initial_data()
     return _serialize_state()

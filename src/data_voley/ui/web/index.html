@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DataVoley — Analizador Visual de Partidos de Voleibol</title>
+  <title>DataVoley — Analizador Visual (Modo Municipal 3 Sets / Oficial 5 Sets)</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -37,17 +37,18 @@
     }
 
     /* =========================================================================
-       PANTALLA 1 (LO PRIMERO QUE SE VE): CONECTAR ENLACE DEL PARTIDO
+       PANTALLA 1 (BIENVENIDA): LINK, MINUTO, FORMATO MUNICIPAL/OFICIAL Y RESULTADO
        ========================================================================= */
     .welcome-overlay {
       position: fixed;
       inset: 0;
-      background: radial-gradient(circle at top, #162447 0%, #090e1a 75%);
+      background: radial-gradient(circle at top, #162447 0%, #090e1a 78%);
       z-index: 1000;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 20px;
+      padding: 18px;
+      overflow-y: auto;
     }
 
     .welcome-overlay.hidden {
@@ -59,23 +60,24 @@
       border: 2px solid var(--border);
       border-radius: 16px;
       width: 100%;
-      max-width: 640px;
-      padding: 32px;
+      max-width: 740px;
+      padding: 26px 30px;
       box-shadow: 0 24px 60px rgba(0, 0, 0, 0.65);
       display: flex;
       flex-direction: column;
-      gap: 22px;
+      gap: 16px;
+      margin: auto;
     }
 
     .welcome-header {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 14px;
     }
 
     .ball-icon {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       background: conic-gradient(var(--gold) 0deg 180deg, var(--blue) 180deg 360deg);
       border: 3px solid #fff;
@@ -84,13 +86,13 @@
 
     .welcome-header h1 {
       font-family: 'Chakra Petch', sans-serif;
-      font-size: 1.75rem;
+      font-size: 1.55rem;
       color: #fff;
     }
 
     .welcome-header p {
       color: var(--muted);
-      font-size: 0.92rem;
+      font-size: 0.88rem;
       margin-top: 2px;
     }
 
@@ -98,7 +100,7 @@
       background: var(--bg-card);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 16px 18px;
+      padding: 14px 16px;
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -106,16 +108,11 @@
 
     .step-title {
       font-weight: 700;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       color: var(--gold);
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-
-    .input-row {
-      display: flex;
-      gap: 8px;
     }
 
     input.text-input, select.select-input {
@@ -124,8 +121,8 @@
       color: #fff;
       border: 1px solid #3b4f76;
       border-radius: 8px;
-      padding: 12px 14px;
-      font-size: 0.95rem;
+      padding: 10px 12px;
+      font-size: 0.9rem;
       font-family: 'Inter', sans-serif;
     }
 
@@ -137,20 +134,102 @@
     .form-grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 12px;
+      gap: 10px;
     }
 
     .field-label {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--muted);
       margin-bottom: 4px;
       display: block;
     }
 
+    /* SELECTOR DE FORMATO (MUNICIPAL 3 SETS vs OFICIAL 5 SETS) */
+    .format-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .format-option {
+      background: #0b1222;
+      border: 2px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 13px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .format-option:hover {
+      border-color: #60a5fa;
+    }
+
+    .format-option.selected {
+      border-color: var(--gold);
+      background: rgba(245, 183, 0, 0.12);
+    }
+
+    .format-option strong {
+      display: block;
+      font-size: 0.9rem;
+      color: #fff;
+      margin-bottom: 4px;
+    }
+
+    .format-option p {
+      font-size: 0.76rem;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    /* MARCADORES POR SET (PARA CORTES Y DECISIONES ARBITRALES) */
+    .set-scores-inputs {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .set-score-box {
+      background: #0b1222;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 5px;
+      flex: 1;
+      min-width: 110px;
+    }
+
+    .set-score-box span.lbl {
+      font-size: 0.74rem;
+      font-weight: 700;
+      color: var(--gold);
+    }
+
+    .set-score-pair {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .set-score-pair input {
+      width: 48px;
+      text-align: center;
+      background: #15203b;
+      color: #fff;
+      border: 1px solid #3b4f76;
+      border-radius: 6px;
+      padding: 5px 4px;
+      font-weight: 700;
+      font-size: 0.9rem;
+    }
+
     .welcome-actions {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
     .btn-primary-large {
@@ -158,11 +237,10 @@
       color: #090e1a;
       border: none;
       border-radius: 10px;
-      padding: 15px 20px;
-      font-size: 1.05rem;
+      padding: 14px 20px;
+      font-size: 1rem;
       font-weight: 700;
       cursor: pointer;
-      transition: transform 0.1s, background 0.15s;
     }
 
     .btn-primary-large:hover {
@@ -174,15 +252,10 @@
       color: var(--text);
       border: 1px solid var(--border);
       border-radius: 10px;
-      padding: 11px 18px;
-      font-size: 0.9rem;
+      padding: 10px 18px;
+      font-size: 0.86rem;
       font-weight: 600;
       cursor: pointer;
-    }
-
-    .btn-secondary-large:hover {
-      background: var(--bg-card);
-      border-color: #3b82f6;
     }
 
     .btn-demo-link {
@@ -191,7 +264,7 @@
       border: 1px solid #2563eb;
       padding: 4px 10px;
       border-radius: 6px;
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       cursor: pointer;
       font-weight: 600;
     }
@@ -222,7 +295,7 @@
 
     .score-team {
       font-family: 'Chakra Petch', sans-serif;
-      font-size: 1.15rem;
+      font-size: 1.12rem;
       font-weight: 700;
       display: flex;
       align-items: center;
@@ -231,7 +304,7 @@
 
     .score-big {
       font-family: 'Chakra Petch', sans-serif;
-      font-size: 1.9rem;
+      font-size: 1.85rem;
       font-weight: 700;
       color: var(--gold);
     }
@@ -267,9 +340,9 @@
       background: var(--bg-card);
       color: var(--muted);
       border: 2px solid var(--border);
-      padding: 9px 18px;
+      padding: 8px 16px;
       border-radius: 8px;
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       font-weight: 700;
       cursor: pointer;
       display: flex;
@@ -294,14 +367,14 @@
       background: rgba(0, 0, 0, 0.35);
       padding: 2px 8px;
       border-radius: 5px;
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--gold);
     }
 
-    /* LAYOUT PRINCIPAL DE 2 COLUMNAS CLARAS */
+    /* LAYOUT PRINCIPAL */
     .main-grid {
       display: grid;
-      grid-template-columns: 420px 1fr;
+      grid-template-columns: 410px 1fr;
       gap: 18px;
       padding: 18px 24px;
       max-width: 1600px;
@@ -315,27 +388,26 @@
       padding: 16px 18px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 13px;
     }
 
     .card-title {
-      font-size: 1.05rem;
+      font-size: 1.02rem;
       font-weight: 700;
       color: #fff;
       display: flex;
       align-items: center;
       justify-content: space-between;
       border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-      padding-bottom: 10px;
+      padding-bottom: 9px;
     }
 
     .card-subtitle {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--muted);
       font-weight: 400;
     }
 
-    /* REPRODUCTOR DE STREAM */
     .stream-box {
       width: 100%;
       background: #050811;
@@ -365,7 +437,7 @@
     /* TARJETAS RESUMEN DE SET A SET VS PARTIDO COMPLETO */
     .summary-cards {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(auto-fit, minmax(175px, 1fr));
       gap: 12px;
     }
 
@@ -389,22 +461,22 @@
 
     .sum-card-title {
       font-weight: 700;
-      font-size: 0.92rem;
+      font-size: 0.9rem;
       color: var(--gold);
       display: flex;
       justify-content: space-between;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .sum-stat-big {
       font-family: 'Chakra Petch', sans-serif;
-      font-size: 1.55rem;
+      font-size: 1.45rem;
       font-weight: 700;
       color: #fff;
     }
 
     .sum-details {
-      font-size: 0.8rem;
+      font-size: 0.78rem;
       color: var(--muted);
       margin-top: 6px;
       display: flex;
@@ -412,7 +484,7 @@
       gap: 3px;
     }
 
-    /* GRÁFICOS DE BARRAS GRANDES Y FÁCILES DE VER */
+    /* GRÁFICOS DE BARRAS GRANDES */
     .charts-two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -422,7 +494,7 @@
     .visual-bars {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 11px;
     }
 
     .bar-item {
@@ -434,7 +506,7 @@
     .bar-header {
       display: flex;
       justify-content: space-between;
-      font-size: 0.86rem;
+      font-size: 0.84rem;
     }
 
     .bar-header strong {
@@ -446,7 +518,7 @@
     }
 
     .bar-rail {
-      height: 22px;
+      height: 21px;
       background: #090e1a;
       border-radius: 6px;
       overflow: hidden;
@@ -469,7 +541,7 @@
       background: var(--bg-card);
       border: 2px solid var(--border);
       border-radius: 8px;
-      padding: 10px 6px;
+      padding: 9px 6px;
       text-align: center;
       cursor: pointer;
       color: var(--text);
@@ -482,12 +554,12 @@
 
     .rot-btn strong {
       display: block;
-      font-size: 1.1rem;
+      font-size: 1.05rem;
       color: var(--gold);
     }
 
     .rot-btn span {
-      font-size: 0.74rem;
+      font-size: 0.73rem;
       color: var(--muted);
     }
 
@@ -495,10 +567,10 @@
       background: var(--bg-card);
       color: #fff;
       border: 1px solid var(--border);
-      padding: 8px 14px;
+      padding: 7px 12px;
       border-radius: 8px;
       font-weight: 600;
-      font-size: 0.84rem;
+      font-size: 0.8rem;
       cursor: pointer;
     }
 
@@ -509,7 +581,7 @@
     .legend-simple {
       display: flex;
       gap: 16px;
-      font-size: 0.78rem;
+      font-size: 0.76rem;
       color: var(--muted);
       padding-top: 4px;
     }
@@ -523,7 +595,7 @@
     }
 
     @media (max-width: 1150px) {
-      .main-grid, .charts-two-col, .summary-cards {
+      .main-grid, .charts-two-col, .format-cards {
         grid-template-columns: 1fr;
       }
     }
@@ -532,7 +604,7 @@
 <body>
 
   <!-- =======================================================================
-       PASO 1 (PANTALLA INICIAL): PEGAR EL LINK DEL PARTIDO
+       PASO 1 (PANTALLA INICIAL): LINK, MINUTO, FORMATO Y RESULTADO POR SET
        ======================================================================= -->
   <div class="welcome-overlay" id="welcome-modal">
     <div class="welcome-card">
@@ -540,11 +612,11 @@
         <div class="ball-icon"></div>
         <div>
           <h1>DataVoley — Analizador de Partidos</h1>
-          <p>Introduce el enlace del partido para extraer y visualizar todas las estadísticas en gráficos.</p>
+          <p>Pega el enlace del vídeo, elige el formato (Municipal 3 sets u Oficial 5 sets) y pon el resultado para cuadrar los cortes y el árbitro.</p>
         </div>
       </div>
 
-      <!-- PASO 1: LINK Y MINUTO DE INICIO -->
+      <!-- 1. LINK Y MINUTO DE INICIO -->
       <div class="step-box">
         <div class="step-title">
           <span>1. Enlace del Vídeo y Minuto donde empieza tu Partido</span>
@@ -559,33 +631,41 @@
           placeholder="Pega aquí tu enlace (YouTube, Twitch, stream .m3u8 o archivo .mp4)..."
           value="https://stream.fivb.org/live/vnl_final_court1.m3u8"
         />
-        <div style="margin-top:6px;">
-          <label class="field-label" style="color:#f8fafc; font-weight:600;">
-            ⏱️ ¿En qué minuto del vídeo empieza el partido? <span style="color:var(--muted); font-weight:400;">(Salta el partido anterior o el calentamiento)</span>
-          </label>
-          <div style="display:flex; gap:8px; align-items:center; margin-top:4px;">
-            <input
-              type="text"
-              id="input-start-minute"
-              class="text-input"
-              placeholder="Ej: 15 (minuto 15) o 12:30"
-              value="00:00"
-              style="max-width:220px;"
-            />
-            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='00:00'">00:00</button>
-            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='10:00'">Min 10:00</button>
-            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='15:00'">Min 15:00</button>
-            <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='25:00'">Min 25:00</button>
-          </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span style="font-size:0.82rem; color:#f8fafc; font-weight:600;">
+            ⏱️ ¿En qué minuto empieza el partido? (Salta el partido anterior):
+          </span>
+          <input
+            type="text"
+            id="input-start-minute"
+            class="text-input"
+            placeholder="Ej: 15 o 12:30"
+            value="12:30"
+            style="max-width:130px; padding:7px 10px;"
+          />
+          <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='00:00'">00:00</button>
+          <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='12:30'">Min 12:30</button>
+          <button type="button" class="btn-demo-link" onclick="document.getElementById('input-start-minute').value='20:00'">Min 20:00</button>
         </div>
       </div>
 
-      <!-- PASO 2: EQUIPOS Y ROTACIÓN INICIAL -->
+      <!-- 2. FORMATO DEL PARTIDO (MUNICIPAL 3 SETS vs OFICIAL 5 SETS) -->
       <div class="step-box">
         <div class="step-title">
-          <span>2. Equipos y Rotación Inicial (R1 a R6)</span>
+          <span>2. Formato de Competición (Elige uno)</span>
         </div>
-        <div class="form-grid-2">
+        <div class="format-cards">
+          <div class="format-option selected" id="fmt-municipal" onclick="selectMatchFormat('MUNICIPAL_3')">
+            <strong>🏅 Modo Municipal (Al mejor de 3 Sets)</strong>
+            <p>Gana el partido quien gane <b>2 sets</b>.<br>• Sets 1 y 2 se juegan a <b>25 puntos</b>.<br>• Si empatan 1-1, el <b>3º Set decisivo es a 15 puntos</b>.</p>
+          </div>
+          <div class="format-option" id="fmt-oficial" onclick="selectMatchFormat('OFICIAL_5')">
+            <strong>🏆 Modo Oficial Federado (Al mejor de 5 Sets)</strong>
+            <p>Gana el partido quien gane <b>3 sets</b>.<br>• Sets 1, 2, 3 y 4 se juegan a <b>25 puntos</b>.<br>• Si empatan 2-2, el <b>5º Set decisivo es a 15 puntos</b>.</p>
+          </div>
+        </div>
+
+        <div class="form-grid-2" style="margin-top:4px;">
           <div>
             <label class="field-label">Nombre de tu Equipo</label>
             <input type="text" id="input-home-name" class="text-input" value="Mi Equipo" />
@@ -595,9 +675,10 @@
             <input type="text" id="input-away-name" class="text-input" value="Rival" />
           </div>
         </div>
-        <div class="form-grid-2" style="margin-top:4px;">
+
+        <div class="form-grid-2">
           <div>
-            <label class="field-label">¿En qué Rotación empieza tu equipo?</label>
+            <label class="field-label">Rotación inicial de tu equipo</label>
             <select id="input-init-rotation" class="select-input">
               <option value="1">R1 — Colocador empieza en Zona 1 (Zaguero)</option>
               <option value="2">R2 — Colocador empieza en Zona 6 (Zaguero)</option>
@@ -608,7 +689,7 @@
             </select>
           </div>
           <div>
-            <label class="field-label">¿Quién empieza sacando?</label>
+            <label class="field-label">¿Quién empieza sacando en el Set 1?</label>
             <select id="input-init-server" class="select-input">
               <option value="HOME">Saca Mi Equipo</option>
               <option value="AWAY">Saca el Rival</option>
@@ -617,13 +698,24 @@
         </div>
       </div>
 
+      <!-- 3. RESULTADO REAL POR SET (PARA SUPLIR CORTES DE VÍDEO Y DECISIONES DEL ÁRBITRO) -->
+      <div class="step-box">
+        <div class="step-title">
+          <span>3. Resultado Real de cada Set (Compensa cortes del vídeo y decisiones del árbitro)</span>
+        </div>
+        <p style="font-size:0.78rem; color:var(--muted);">
+          Como en los vídeos suele haber cortes de grabación y pitidos del árbitro a favor o en contra (dobles, red, líneas dudosas), indica cómo quedaron los sets para cuadrar todos los puntos y rotaciones al 100% *(pon 0 - 0 si un set no se jugó)*:
+        </p>
+        <div class="set-scores-inputs" id="set-scores-container"></div>
+      </div>
+
       <!-- BOTONES DE INICIO -->
       <div class="welcome-actions">
         <button type="button" class="btn-primary-large" onclick="startAnalysis(true)">
-          📊 Analizar Enlace y Ver Gráficos por Set y Partido
+          📊 Analizar Partido con estos Resultados y Ver Gráficos
         </button>
         <button type="button" class="btn-secondary-large" onclick="startAnalysis(false)">
-          ⏱️ Empezar con marcador a 0-0 (Anotar yo mismo mientras veo el vídeo)
+          ⏱️ Empezar con marcador a 0-0 (Anotar en vivo mientras veo el vídeo)
         </button>
       </div>
     </div>
@@ -636,8 +728,8 @@
     <div style="display:flex; align-items:center; gap:12px;">
       <div class="ball-icon" style="width:34px; height:34px;"></div>
       <div>
-        <div style="font-family:'Chakra Petch'; font-weight:700; font-size:1.2rem;">DATA_VOLEY</div>
-        <div style="font-size:0.76rem; color:var(--muted);" id="active-stream-text">Enlace conectado</div>
+        <div style="font-family:'Chakra Petch'; font-weight:700; font-size:1.15rem;" id="format-badge-header">DATA_VOLEY — MODO MUNICIPAL</div>
+        <div style="font-size:0.74rem; color:var(--muted);" id="active-stream-text">Enlace conectado</div>
       </div>
     </div>
 
@@ -648,8 +740,8 @@
       </div>
       <span class="score-big" id="score-home">0</span>
       <div style="text-align:center; padding:0 8px;">
-        <div style="font-size:0.75rem; color:var(--muted);" id="set-title-top">SET 3</div>
-        <div style="font-size:0.85rem; font-weight:700; color:#60a5fa;" id="sets-won-top">Sets: 1 - 1</div>
+        <div style="font-size:0.74rem; color:var(--muted);" id="set-title-top">RESULTADO SETS</div>
+        <div style="font-size:0.9rem; font-weight:700; color:#60a5fa;" id="sets-won-top">2 - 1</div>
       </div>
       <span class="score-big" id="score-away">0</span>
       <div class="score-team">
@@ -658,15 +750,15 @@
       </div>
     </div>
 
-    <div style="display:flex; gap:8px;">
-      <button class="btn-small" style="background:rgba(16,185,129,0.2); border-color:var(--green);" onclick="scorePoint('HOME')">
-        +1 Punto Mi Equipo
+    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+      <button class="btn-small" style="background:rgba(16,185,129,0.2); border-color:var(--green);" onclick="scorePoint('HOME', true)" title="Añadir punto por decisión arbitral o corte de vídeo">
+        ⚖️ +1 Árbitro/Corte (Mío)
       </button>
-      <button class="btn-small" style="background:rgba(239,68,68,0.2); border-color:var(--red);" onclick="scorePoint('AWAY')">
-        +1 Punto Rival
+      <button class="btn-small" style="background:rgba(239,68,68,0.2); border-color:var(--red);" onclick="scorePoint('AWAY', true)" title="Añadir punto al rival por decisión arbitral o corte">
+        ⚖️ +1 Árbitro/Corte (Rival)
       </button>
       <button class="btn-small" style="border-color:var(--gold); color:var(--gold);" onclick="openWelcomeModal()">
-        🔗 Cambiar Enlace de Vídeo
+        🔗 Cambiar Enlace / Formato
       </button>
     </div>
   </header>
@@ -676,10 +768,10 @@
        ======================================================================= -->
   <div class="sets-bar">
     <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
-      <span style="font-weight:700; font-size:0.9rem; color:var(--gold);">VER GRÁFICOS DE:</span>
+      <span style="font-weight:700; font-size:0.9rem; color:var(--gold);">VER ESTADÍSTICAS Y GRÁFICOS DE:</span>
       <div class="set-tabs" id="set-tabs"></div>
     </div>
-    <div style="font-size:0.85rem; color:var(--muted);" id="scope-indicator-label">
+    <div style="font-size:0.82rem; color:var(--muted);" id="scope-indicator-label">
       Mostrando estadísticas de todo el partido
     </div>
   </div>
@@ -689,10 +781,9 @@
        ======================================================================= -->
   <div class="main-grid">
 
-    <!-- COLUMNA IZQUIERDA: VÍDEO DEL LINK + PISTA 2D DE ZONAS Y ROTACIÓN -->
+    <!-- COLUMNA IZQUIERDA: VÍDEO DEL LINK + PISTA 2D -->
     <div style="display:flex; flex-direction:column; gap:16px;">
 
-      <!-- REPRODUCTOR DEL STREAM -->
       <div class="card">
         <div class="card-title">
           <span>📺 Vídeo del Partido</span>
@@ -703,7 +794,6 @@
         </div>
       </div>
 
-      <!-- PISTA 2D INTERACTIVA -->
       <div class="card">
         <div class="card-title">
           <span>🏐 Posición en Pista y Remates (Zonas 1 a 6)</span>
@@ -721,25 +811,19 @@
               </marker>
             </defs>
 
-            <!-- Fondo exterior naranja Teraflex -->
             <rect x="0" y="0" width="360" height="520" fill="#7c2d12" />
-
-            <!-- Pista 9x18m (x: 45..315 [270px], y: 30..490 [460px]) -->
             <rect x="45" y="30" width="270" height="460" fill="#1e40af" stroke="#fff" stroke-width="3" />
 
-            <!-- Divisiones de zonas -->
             <line x1="135" y1="30" x2="135" y2="490" stroke="rgba(255,255,255,0.18)" stroke-dasharray="4,4" />
             <line x1="225" y1="30" x2="225" y2="490" stroke="rgba(255,255,255,0.18)" stroke-dasharray="4,4" />
 
-            <!-- Líneas de 3 metros -->
             <line x1="45" y1="183" x2="315" y2="183" stroke="#fff" stroke-width="2" />
             <line x1="45" y1="336" x2="315" y2="336" stroke="#fff" stroke-width="2" />
 
-            <!-- RED CENTRAL -->
             <line x1="30" y1="260" x2="330" y2="260" stroke="#f5b700" stroke-width="4" />
             <text x="180" y="253" fill="#f5b700" font-size="11" font-weight="bold" text-anchor="middle">RED CENTRAL</text>
 
-            <!-- Etiquetas Campo Rival (Arriba) -->
+            <!-- Campo Rival -->
             <text x="90" y="110" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z1</text>
             <text x="180" y="110" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z6</text>
             <text x="270" y="110" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z5</text>
@@ -747,7 +831,7 @@
             <text x="180" y="225" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z3</text>
             <text x="270" y="225" fill="rgba(255,255,255,0.25)" font-size="18" font-weight="bold" text-anchor="middle">Z4</text>
 
-            <!-- Etiquetas Mi Equipo (Abajo) -->
+            <!-- Mi Equipo -->
             <text x="90" y="305" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z4</text>
             <text x="180" y="305" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z3</text>
             <text x="270" y="305" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z2</text>
@@ -755,10 +839,7 @@
             <text x="180" y="425" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z6</text>
             <text x="270" y="425" fill="rgba(255,255,255,0.35)" font-size="20" font-weight="bold" text-anchor="middle">Z1</text>
 
-            <!-- Flechas de remates -->
             <g id="trajectories-layer"></g>
-
-            <!-- Jugadores en pista -->
             <g id="players-layer"></g>
           </svg>
         </div>
@@ -779,8 +860,8 @@
       <!-- 1. COMPARATIVA RÁPIDA: PARTIDO ENTERO Y CADA SET -->
       <div class="card">
         <div class="card-title">
-          <span>🏆 Comparativa General: Partido Entero vs Cada Set</span>
-          <span class="card-subtitle">Haz clic en cualquier recuadro para ver sus gráficos en detalle</span>
+          <span>🏆 Resumen por cada Set y Partido Entero (Incluye ajustes por cortes y árbitro)</span>
+          <span class="card-subtitle">Haz clic en cualquier recuadro para filtrar los gráficos</span>
         </div>
         <div class="summary-cards" id="summary-cards"></div>
       </div>
@@ -831,6 +912,8 @@
   </div>
 
   <script>
+    let selectedFormat = 'MUNICIPAL_3';
+
     const HOME_ZONE_COORDS_SVG = {
       "1": { cx: 270, cy: 420 },
       "2": { cx: 270, cy: 300 },
@@ -852,6 +935,62 @@
         x: (svgX - 45.0) / 30.0,
         y: (490.0 - svgY) / 25.55
       };
+    }
+
+    function selectMatchFormat(fmt) {
+      selectedFormat = fmt;
+      document.getElementById('fmt-municipal').classList.toggle('selected', fmt === 'MUNICIPAL_3');
+      document.getElementById('fmt-oficial').classList.toggle('selected', fmt === 'OFICIAL_5');
+      renderSetScoreInputs();
+    }
+
+    function renderSetScoreInputs() {
+      const container = document.getElementById('set-scores-container');
+      container.innerHTML = '';
+
+      const defaultsMunicipal = [
+        { set_num: 1, label: 'Set 1 (a 25 pt)', home: 25, away: 21 },
+        { set_num: 2, label: 'Set 2 (a 25 pt)', home: 22, away: 25 },
+        { set_num: 3, label: '3º Set (a 15 pt)', home: 15, away: 12 }
+      ];
+
+      const defaultsOficial = [
+        { set_num: 1, label: 'Set 1 (a 25 pt)', home: 25, away: 20 },
+        { set_num: 2, label: 'Set 2 (a 25 pt)', home: 21, away: 25 },
+        { set_num: 3, label: 'Set 3 (a 25 pt)', home: 25, away: 22 },
+        { set_num: 4, label: 'Set 4 (a 25 pt)', home: 25, away: 19 },
+        { set_num: 5, label: '5º Set (a 15 pt)', home: 0,  away: 0 }
+      ];
+
+      const list = selectedFormat === 'MUNICIPAL_3' ? defaultsMunicipal : defaultsOficial;
+      list.forEach((item) => {
+        const box = document.createElement('div');
+        box.className = 'set-score-box';
+        box.innerHTML = `
+          <span class="lbl">${item.label}</span>
+          <div class="set-score-pair">
+            <input type="number" min="0" max="50" id="set-h-${item.set_num}" value="${item.home}" title="Puntos Mi Equipo" />
+            <span>-</span>
+            <input type="number" min="0" max="50" id="set-a-${item.set_num}" value="${item.away}" title="Puntos Rival" />
+          </div>
+        `;
+        container.appendChild(box);
+      });
+    }
+
+    function collectSetResultsFromInputs() {
+      const maxS = selectedFormat === 'MUNICIPAL_3' ? 3 : 5;
+      const results = [];
+      for (let s = 1; s <= maxS; s++) {
+        const hEl = document.getElementById(`set-h-${s}`);
+        const aEl = document.getElementById(`set-a-${s}`);
+        const hVal = hEl ? parseInt(hEl.value || '0', 10) : 0;
+        const aVal = aEl ? parseInt(aEl.value || '0', 10) : 0;
+        if (hVal > 0 || aVal > 0) {
+          results.push({ set_num: s, home: hVal, away: aVal });
+        }
+      }
+      return results;
     }
 
     function fillSampleLink() {
@@ -876,7 +1015,6 @@
       document.getElementById('active-stream-text').textContent =
         `Fuente: ${url}  •  ⏱️ Inicio partido: min ${startFormatted}`;
 
-      // Check if YouTube URL
       const ytMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
       if (ytMatch) {
         const videoId = ytMatch[1];
@@ -887,7 +1025,6 @@
         return;
       }
 
-      // Otherwise HTML5 video / HLS (.m3u8)
       const video = document.createElement('video');
       video.controls = true;
       video.muted = true;
@@ -895,9 +1032,7 @@
       container.appendChild(video);
 
       const seekToStart = () => {
-        if (startSecInt > 0 && video.duration && startSecInt < video.duration) {
-          video.currentTime = startSecInt;
-        } else if (startSecInt > 0) {
+        if (startSecInt > 0) {
           try { video.currentTime = startSecInt; } catch (e) {}
         }
       };
@@ -924,6 +1059,7 @@
       const awayName = document.getElementById('input-away-name').value.trim() || 'Rival';
       const initRot = parseInt(document.getElementById('input-init-rotation').value, 10);
       const initSrv = document.getElementById('input-init-server').value;
+      const setResults = collectSetResultsFromInputs();
 
       const res = await fetch('/api/connect-stream', {
         method: 'POST',
@@ -933,8 +1069,10 @@
           start_minute: startMin,
           home_name: homeName,
           away_name: awayName,
+          match_format: selectedFormat,
           initial_rotation: initRot,
           initial_server: initSrv,
+          set_results: setResults,
           auto_analyze: autoAnalyze
         })
       });
@@ -958,11 +1096,11 @@
       renderDashboard(state);
     }
 
-    async function scorePoint(winner) {
+    async function scorePoint(winner, isRefOrCut = false) {
       const res = await fetch('/api/rally', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ winner })
+        body: JSON.stringify({ winner, is_referee_or_cut: isRefOrCut })
       });
       const state = await res.json();
       renderDashboard(state);
@@ -1002,51 +1140,66 @@
     }
 
     function renderDashboard(state) {
-      const scope = state.active_scope; // 'ALL' or '1', '2', '3'
+      const scope = state.active_scope;
       const scopeTitle = scope === 'ALL' ? 'Partido Entero' : `Set ${scope}`;
 
-      // 1. Nombres y Marcador
+      // 1. Formato y Marcador
+      document.getElementById('format-badge-header').textContent =
+        state.match.max_sets === 3
+          ? 'DATA_VOLEY • MODO MUNICIPAL (Al mejor de 3 Sets, 3º a 15 pt)'
+          : 'DATA_VOLEY • MODO OFICIAL (Al mejor de 5 Sets, 5º a 15 pt)';
+
       document.getElementById('label-home-name').textContent = state.match.home_name;
       document.getElementById('label-away-name').textContent = state.match.away_name;
-      document.getElementById('score-home').textContent = state.match.home_score;
-      document.getElementById('score-away').textContent = state.match.away_score;
-      document.getElementById('set-title-top').textContent = `SET ${state.match.current_set} EN JUEGO`;
+
+      if (scope !== 'ALL' && state.set_scoreboards[scope]) {
+        const sb = state.set_scoreboards[scope];
+        document.getElementById('score-home').textContent = sb.HOME;
+        document.getElementById('score-away').textContent = sb.AWAY;
+        document.getElementById('set-title-top').textContent = `MARCADOR SET ${scope} (a ${sb.target_pts || 25} pt)`;
+      } else {
+        document.getElementById('score-home').textContent = state.match.home_score;
+        document.getElementById('score-away').textContent = state.match.away_score;
+        document.getElementById('set-title-top').textContent = `SET ${state.match.current_set}`;
+      }
+
       document.getElementById('sets-won-top').textContent =
-        `Sets: ${state.match.sets_won.HOME} - ${state.match.sets_won.AWAY}`;
+        `Sets Ganados: ${state.match.sets_won.HOME} - ${state.match.sets_won.AWAY}`;
 
       document.getElementById('badge-serve-home').style.display =
         state.match.serving_team === 'HOME' ? 'inline-block' : 'none';
       document.getElementById('badge-serve-away').style.display =
         state.match.serving_team === 'AWAY' ? 'inline-block' : 'none';
 
-      // 2. Pestañas de Selección (Partido Entero / Set 1 / Set 2 / Set 3)
+      // 2. Pestañas de Selección (Partido Entero / Set 1 / Set 2 / Set 3...)
       const tabsEl = document.getElementById('set-tabs');
       tabsEl.innerHTML = '';
 
       const allBtn = document.createElement('button');
       allBtn.className = 'set-tab' + (scope === 'ALL' ? ' active' : '');
       allBtn.onclick = () => selectScope('ALL');
-      allBtn.innerHTML = `🏆 PARTIDO ENTERO <span class="pill">${state.match.sets_won.HOME}-${state.match.sets_won.AWAY}</span>`;
+      allBtn.innerHTML = `🏆 PARTIDO ENTERO <span class="pill">${state.match.sets_won.HOME}-${state.match.sets_won.AWAY} Sets</span>`;
       tabsEl.appendChild(allBtn);
 
       state.available_sets.forEach((sNum) => {
         const k = String(sNum);
-        const sb = state.set_scoreboards[k] || { HOME: 0, AWAY: 0 };
+        const sb = state.set_scoreboards[k] || { HOME: 0, AWAY: 0, target_pts: 25 };
+        const isTieBreak = sNum === state.match.max_sets;
         const b = document.createElement('button');
         b.className = 'set-tab' + (scope === k ? ' active' : '');
         b.onclick = () => selectScope(k);
-        b.innerHTML = `🏐 SET ${sNum} <span class="pill">${sb.HOME}-${sb.AWAY}</span>`;
+        b.innerHTML = `🏐 SET ${sNum}${isTieBreak ? ' (15pt)' : ''} <span class="pill">${sb.HOME}-${sb.AWAY}</span>`;
         tabsEl.appendChild(b);
       });
 
       document.getElementById('scope-indicator-label').textContent =
-        `Viendo datos de: ${scopeTitle}`;
+        `${state.match.format_description}`;
       document.getElementById('title-chart-zones').textContent =
         `📊 Remates por Zona (${scopeTitle})`;
       document.getElementById('title-chart-serves').textContent =
         `🎯 Saques por Rotación (${scopeTitle})`;
 
-      // 3. Tarjetas Comparativas (Partido Entero vs Set 1, Set 2, Set 3)
+      // 3. Tarjetas Comparativas (Partido Entero vs cada Set)
       const sumEl = document.getElementById('summary-cards');
       sumEl.innerHTML = '';
       ['ALL', ...state.available_sets.map(String)].forEach((k) => {
@@ -1058,13 +1211,14 @@
         card.onclick = () => selectScope(k);
         card.innerHTML = `
           <div class="sum-card-title">
-            <span>${k === 'ALL' ? '🏆 Partido Entero' : '🏐 Set ' + k}</span>
-            <span style="color:var(--green)">${effPct}% Acierto</span>
+            <span>${k === 'ALL' ? '🏆 Partido Entero' : '🏐 Set ' + k} (${item.score_str || ''})</span>
+            <span style="color:var(--green)">${effPct}% Efic.</span>
           </div>
-          <div class="sum-stat-big">${item.kills} pts <span style="font-size:0.85rem; color:var(--muted); font-weight:400;">de ${item.total_attacks} remates</span></div>
+          <div class="sum-stat-big">${item.kills} pts <span style="font-size:0.82rem; color:var(--muted); font-weight:400;">de ${item.total_attacks} remates</span></div>
           <div class="sum-details">
-            <div>🔥 Mejor zona de ataque: <strong style="color:#fff">Zona ${item.best_zone.replace('Z','')}</strong></div>
-            <div>⚠️ Más fallos de saque: <strong style="color:#f87171">${item.vulnerable_rotation} (${item.vulnerable_rotation_errors} fallos)</strong></div>
+            <div>🔥 Mejor zona: <strong style="color:#fff">Zona ${item.best_zone.replace('Z','')}</strong></div>
+            <div>⚠️ Más fallos saque: <strong style="color:#f87171">${item.vulnerable_rotation} (${item.vulnerable_rotation_errors})</strong></div>
+            <div>⚖️ Ptos inferidos (cortes/árbitro): <strong style="color:var(--gold)">${item.inferred_cuts_and_ref || 0} pts</strong></div>
           </div>
         `;
         sumEl.appendChild(card);
@@ -1146,7 +1300,7 @@
         rotGrid.appendChild(btn);
       }
 
-      // 7. Dibujar Pista 2D (Flechas y Jugadores)
+      // 7. Dibujar Pista 2D
       const trajLayer = document.getElementById('trajectories-layer');
       trajLayer.innerHTML = '';
       state.trajectories.forEach((t) => {
@@ -1188,7 +1342,8 @@
       });
     }
 
-    // Cargar estado de fondo por si cierra el modal
+    // Inicializar casillas de sets en la pantalla de bienvenida
+    renderSetScoreInputs();
     fetch('/api/state').then(r => r.json()).then(renderDashboard);
   </script>
 </body>

@@ -27,24 +27,54 @@ from data_voley.api.server import (
 
 
 def test_connect_stream_first_step_workflow() -> None:
-    """Verify connecting a stream URL configures team names, start minute, and data."""
+    """Verify connecting a stream URL configures Municipal format, set results, and start minute."""
     state = connect_stream_endpoint(
         ConnectStreamRequest(
             stream_url="https://stream.fivb.org/live/match123.m3u8",
             start_minute="12:30",
             home_name="CV Madrid",
             away_name="Unicaja Almería",
+            match_format="MUNICIPAL_3",
             initial_rotation=2,
             initial_server="HOME",
+            set_results=[
+                {"set_num": 1, "home": 25, "away": 19},
+                {"set_num": 2, "home": 21, "away": 25},
+                {"set_num": 3, "home": 15, "away": 11},
+            ],
             auto_analyze=True,
         )
     )
     assert state["match"]["stream_url"] == "https://stream.fivb.org/live/match123.m3u8"
     assert state["match"]["start_offset_seconds"] == 750.0
     assert state["match"]["start_time_formatted"] == "12:30"
-    assert state["match"]["home_name"] == "CV Madrid"
-    assert state["match"]["away_name"] == "Unicaja Almería"
-    assert len(state["available_sets"]) == 3
+    assert state["match"]["match_format"] == "MUNICIPAL_3"
+    assert state["match"]["max_sets"] == 3
+    assert state["match"]["sets_won"] == {"HOME": 2, "AWAY": 1}
+    assert state["set_scoreboards"]["3"]["HOME"] == 15
+    assert state["set_scoreboards"]["3"]["AWAY"] == 11
+    assert state["set_scoreboards"]["3"]["target_pts"] == 15
+
+
+def test_oficial_best_of_five_format_workflow() -> None:
+    """Verify Best of 5 format ('OFICIAL_5': wins with 3 sets)."""
+    state = connect_stream_endpoint(
+        ConnectStreamRequest(
+            stream_url="https://stream.fivb.org/live/vnl_bo5.m3u8",
+            match_format="OFICIAL_5",
+            set_results=[
+                {"set_num": 1, "home": 25, "away": 22},
+                {"set_num": 2, "home": 20, "away": 25},
+                {"set_num": 3, "home": 25, "away": 18},
+                {"set_num": 4, "home": 25, "away": 23},
+            ],
+            auto_analyze=True,
+        )
+    )
+    assert state["match"]["match_format"] == "OFICIAL_5"
+    assert state["match"]["max_sets"] == 5
+    assert state["match"]["sets_needed_to_win"] == 3
+    assert state["match"]["sets_won"] == {"HOME": 3, "AWAY": 1}
 
 
 def test_studio_health_and_initial_seeded_charts() -> None:

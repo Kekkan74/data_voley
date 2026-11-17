@@ -149,3 +149,39 @@ def test_set_win_requires_two_point_advantage() -> None:
     assert state.sets_won[TeamSide.HOME] == 1
     assert state.current_set == 2
     assert state.get_score() == (0, 0)
+
+
+def test_municipal_best_of_three_format_third_set_to_15_points() -> None:
+    """
+    Verify Municipal format (max_sets=3):
+    - Sets 1 and 2 are played to 25 points.
+    - Set 3 (deciding tie-break) is played to 15 points (with 2-pt advantage).
+    - Winning 2 sets finishes the match.
+    """
+    state = TacticalState(max_sets=3)
+
+    # Set 1: HOME wins 25-0
+    for _ in range(25):
+        ev = state.register_rally_point(TeamSide.HOME)
+    assert ev.set_finished is True
+    assert ev.match_finished is False
+    assert state.sets_won[TeamSide.HOME] == 1
+    assert state.current_set == 2
+
+    # Set 2: AWAY wins 25-0 (Match tied 1-1 -> advances to Set 3 tie-break)
+    for _ in range(25):
+        ev = state.register_rally_point(TeamSide.AWAY)
+    assert ev.set_finished is True
+    assert ev.match_finished is False
+    assert state.sets_won[TeamSide.AWAY] == 1
+    assert state.current_set == 3
+
+    # Set 3 (Municipal tie-break to 15 points): HOME wins 15-0
+    for _ in range(14):
+        ev = state.register_rally_point(TeamSide.HOME)
+        assert ev.set_finished is False
+    ev_final = state.register_rally_point(TeamSide.HOME)
+    assert ev_final.set_finished is True
+    assert ev_final.match_finished is True
+    assert state.sets_won[TeamSide.HOME] == 2
+    assert state.sets_won[TeamSide.AWAY] == 1
