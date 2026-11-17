@@ -10,6 +10,7 @@ Inicia automáticamente:
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import socket
 import subprocess
@@ -19,6 +20,12 @@ import time
 import urllib.request
 import webbrowser
 from pathlib import Path
+
+# Guard against pythonw.exe where sys.stdout / sys.stderr are None
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w", encoding="utf-8")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w", encoding="utf-8")
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
