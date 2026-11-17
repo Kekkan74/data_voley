@@ -9,6 +9,7 @@ from data_voley.domain.enums import (
     PlayerRole,
     Rotation,
     ServeOutcome,
+    SetOutcome,
     TagValidationStatus,
     TeamSide,
 )
@@ -19,6 +20,7 @@ from data_voley.domain.models import (
     RallyTransitionEvent,
     RotationFormationSnapshot,
     ServeEvent,
+    SetActionEvent,
     SpatialZoneMapping,
 )
 from data_voley.domain.ports import (

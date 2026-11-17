@@ -1,9 +1,9 @@
 """
 MatchStatsEngine Module — Spatial & Rotational Cross-Tabulation Analytics.
 
-Aggregates serve and attack events, crossing spatial origin/target zones (Z1-Z6)
-with active tactical rotations (R1-R6) and inferred player roles, with support
-for both per-set filtering and full-match aggregation.
+Aggregates serve, setting (Colocaciones), and attack events, crossing spatial
+origin/target zones (Z1-Z6) with active tactical rotations (R1-R6) and inferred
+player roles, with support for both per-set filtering and full-match aggregation.
 """
 
 from __future__ import annotations
@@ -15,23 +15,34 @@ from data_voley.domain.enums import (
     CourtZone,
     Rotation,
     ServeOutcome,
+    SetOutcome,
     TagValidationStatus,
     TeamSide,
 )
-from data_voley.domain.models import AttackEvent, CourtPoint2D, ServeEvent
+from data_voley.domain.models import AttackEvent, CourtPoint2D, ServeEvent, SetActionEvent
 from data_voley.domain.ports import ITacticalStatePort
+
+SETTING_TARGET_LABELS_ES: Dict[CourtZone, str] = {
+    CourtZone.Z4: "Hacia Zona 4 (Punta Izquierda / Receptor)",
+    CourtZone.Z2: "Hacia Zona 2 (Punta Derecha / Opuesto)",
+    CourtZone.Z3: "Hacia Zona 3 (Centro / Primer Tiempo)",
+    CourtZone.Z6: "Hacia Zona 6 (Zaguero Centro / Pipe)",
+    CourtZone.Z1: "Hacia Zona 1 (Zaguero Derecha / Opuesto)",
+    CourtZone.Z5: "Hacia Zona 5 (Bola Alta Emergencia)",
+}
 
 
 class MatchStatsEngine:
     """
-    Core analytical engine correlating spatial actions with tactical rotations (R1-R6)
-    across individual sets and the complete match.
+    Core analytical engine correlating spatial actions (Serves, Setting/Colocaciones,
+    and Attacks) with tactical rotations (R1-R6) across individual sets and full match.
     """
 
     def __init__(self, tactical_port: ITacticalStatePort) -> None:
         self._tactical = tactical_port
         self._serve_events: List[ServeEvent] = []
         self._attack_events: List[AttackEvent] = []
+        self._setting_events: List[SetActionEvent] = []
         self._action_seq: int = 0
 
     @property
@@ -44,12 +55,19 @@ class MatchStatsEngine:
         """Return all recorded attack/spike events."""
         return list(self._attack_events)
 
+    @property
+    def setting_events(self) -> List[SetActionEvent]:
+        """Return all recorded setter pass (Colocación) events."""
+        return list(self._setting_events)
+
     def get_recorded_sets(self) -> List[int]:
         """Return sorted list of all set numbers present in recorded events or active set."""
         sets = {self._tactical.current_set}
         for ev in self._serve_events:
             sets.add(ev.set_number)
         for ev in self._attack_events:
+            sets.add(ev.set_number)
+        for ev in self._setting_events:
             sets.add(ev.set_number)
         return sorted(sets)
 
@@ -81,6 +99,32 @@ class MatchStatsEngine:
             timestamp_ms=timestamp_ms,
         )
         self._serve_events.append(event)
+        return event
+
+    def record_setting_action(
+        self,
+        team: TeamSide,
+        target_zone: CourtZone,
+        outcome: SetOutcome,
+        timestamp_ms: float = 0.0,
+        set_override: Optional[int] = None,
+    ) -> SetActionEvent:
+        """
+        Record a setter pass (Colocación) directed toward `target_zone`.
+        """
+        self._action_seq += 1
+        active_rotation = self._tactical.get_rotation(team)
+        set_num = set_override if set_override is not None else self._tactical.current_set
+        event = SetActionEvent(
+            set_number=set_num,
+            rally_number=self._action_seq,
+            team=team,
+            rotation=active_rotation,
+            target_zone=target_zone,
+            outcome=outcome,
+            timestamp_ms=timestamp_ms,
+        )
+        self._setting_events.append(event)
         return event
 
     def record_attack(
@@ -118,6 +162,128 @@ class MatchStatsEngine:
         )
         self._attack_events.append(event)
         return event
+
+    def get_setting_stats(
+        self, team: TeamSide, set_number: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Compute comprehensive Setter statistics (Colocaciones Exitosas vs Falladas)
+        broken down by destination zone (Z4, Z2, Z3, Z6, Z1), identifying the most
+        successful target zone and the least successful target zone (viceversa).
+        """
+        target_zones_order = [
+            CourtZone.Z4,
+            CourtZone.Z2,
+            CourtZone.Z3,
+            CourtZone.Z6,
+            CourtZone.Z1,
+        ]
+        by_zone: Dict[str, Dict[str, Any]] = {
+            f"Z{z.value}": {
+                "zone_num": z.value,
+                "label": SETTING_TARGET_LABELS_ES[z],
+                "total": 0,
+                "assist_kills": 0,
+                "good_sets": 0,
+                "successful": 0,
+                "error_doubles": 0,
+                "error_bad_pass": 0,
+                "failed": 0,
+                "success_rate": 0.0,
+            }
+            for z in target_zones_order
+        }
+
+        for ev in self._setting_events:
+            if ev.team != team:
+                continue
+            if set_number is not None and ev.set_number != set_number:
+                continue
+
+            z_key = f"Z{ev.target_zone.value}"
+            if z_key not in by_zone:
+                continue
+            bucket = by_zone[z_key]
+            bucket["total"] += 1
+            if ev.outcome == SetOutcome.ASSIST_KILL:
+                bucket["assist_kills"] += 1
+                bucket["successful"] += 1
+            elif ev.outcome == SetOutcome.GOOD_SET:
+                bucket["good_sets"] += 1
+                bucket["successful"] += 1
+            elif ev.outcome == SetOutcome.ERROR_DOUBLES:
+                bucket["error_doubles"] += 1
+                bucket["failed"] += 1
+            elif ev.outcome == SetOutcome.ERROR_BAD_PASS:
+                bucket["error_bad_pass"] += 1
+                bucket["failed"] += 1
+
+        total_sets = 0
+        total_successful = 0
+        total_failed = 0
+
+        active_zones = []
+        for z_key, bucket in by_zone.items():
+            tot = int(bucket["total"])
+            succ = int(bucket["successful"])
+            fail = int(bucket["failed"])
+            total_sets += tot
+            total_successful += succ
+            total_failed += fail
+            if tot > 0:
+                bucket["success_rate"] = round(succ / tot, 4)
+                active_zones.append((z_key, bucket))
+
+        overall_rate = round(total_successful / total_sets, 4) if total_sets > 0 else 0.0
+
+        if active_zones:
+            best_key, best_b = max(
+                active_zones,
+                key=lambda item: (item[1]["success_rate"], item[1]["successful"]),
+            )
+            worst_key, worst_b = min(
+                active_zones,
+                key=lambda item: (item[1]["success_rate"], -item[1]["failed"]),
+            )
+            most_successful = {
+                "zone": best_key,
+                "label": best_b["label"],
+                "success_rate": best_b["success_rate"],
+                "successful": best_b["successful"],
+                "total": best_b["total"],
+            }
+            least_successful = {
+                "zone": worst_key,
+                "label": worst_b["label"],
+                "success_rate": worst_b["success_rate"],
+                "failed": worst_b["failed"],
+                "total": worst_b["total"],
+            }
+        else:
+            most_successful = {
+                "zone": "Z4",
+                "label": SETTING_TARGET_LABELS_ES[CourtZone.Z4],
+                "success_rate": 0.0,
+                "successful": 0,
+                "total": 0,
+            }
+            least_successful = {
+                "zone": "Z2",
+                "label": SETTING_TARGET_LABELS_ES[CourtZone.Z2],
+                "success_rate": 0.0,
+                "failed": 0,
+                "total": 0,
+            }
+
+        return {
+            "total_sets": total_sets,
+            "successful_sets": total_successful,
+            "failed_sets": total_failed,
+            "overall_success_rate": overall_rate,
+            "by_target_zone": by_zone,
+            "most_successful_target": most_successful,
+            "least_successful_target": least_successful,
+        }
 
     def get_serve_errors_by_rotation(
         self, team: TeamSide, set_number: Optional[int] = None
@@ -173,9 +339,6 @@ class MatchStatsEngine:
         """
         Compute attack attempts, kills, errors, and hitting efficiency per CourtZone (1-6)
         for a given set or the entire match (`set_number=None`).
-
-        Formula:
-            Efficiency = (Kills - Errors) / Attempts
         """
         stats: Dict[CourtZone, Dict[str, float | int]] = {
             zone: {
@@ -266,6 +429,7 @@ class MatchStatsEngine:
             key = "ALL" if scope is None else str(scope)
             zone_map = self.get_attack_stats_by_zone(team, set_number=scope)
             srv_map = self.get_serve_errors_by_rotation(team, set_number=scope)
+            set_stats = self.get_setting_stats(team, set_number=scope)
             worst_rot, worst_errs = self.get_most_vulnerable_serve_rotation(team, set_number=scope)
 
             tot_atk = sum(int(z["attempts"]) for z in zone_map.values())
@@ -295,6 +459,9 @@ class MatchStatsEngine:
                 "vulnerable_rotation": worst_rot.name,
                 "vulnerable_rotation_errors": worst_errs,
                 "best_zone": f"Z{best_zone.value}",
+                "setting_success_rate": set_stats["overall_success_rate"],
+                "best_setting_zone": set_stats["most_successful_target"]["zone"],
+                "worst_setting_zone": set_stats["least_successful_target"]["zone"],
             }
 
         return summary

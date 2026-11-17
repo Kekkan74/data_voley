@@ -198,16 +198,16 @@ class TacticalState:
             # z(R_k) = ((z_0 + k - 2) mod 6) + 1
             current_zone_num = ((base_zone.value + k - 2) % 6) + 1
             current_zone = CourtZone(current_zone_num)
+            zone_roles[current_zone] = role
 
-            # Apply FIVB Rule 19: Libero replaces Middle Blocker in back-row defense zones (Z5, Z6)
-            if (
-                use_libero_in_back_row
-                and role in (PlayerRole.MIDDLE_1, PlayerRole.MIDDLE_2)
-                and current_zone in (CourtZone.Z5, CourtZone.Z6)
-            ):
-                zone_roles[current_zone] = PlayerRole.LIBERO
-            else:
-                zone_roles[current_zone] = role
+        # Tactical Defensive Permutation (K1/K2 Defense Phase):
+        # The Libero ALWAYS defends in Zone 5 (diagonal defense), never in Zone 6.
+        # Zone 6 is defended/attacked (Pipe) by the Back-Row Outside Hitter (Receptor Zaguero).
+        if use_libero_in_back_row:
+            if zone_roles[CourtZone.Z6] in (PlayerRole.MIDDLE_1, PlayerRole.MIDDLE_2):
+                zone_roles[CourtZone.Z6] = PlayerRole.OUTSIDE_2
+            if zone_roles[CourtZone.Z5] != PlayerRole.SETTER:
+                zone_roles[CourtZone.Z5] = PlayerRole.LIBERO
 
         setter_zone = rot.setter_zone
         return RotationFormationSnapshot(
@@ -219,6 +219,22 @@ class TacticalState:
         )
 
     def infer_role_at_zone(self, team: TeamSide, zone: CourtZone) -> PlayerRole:
-        """Return the inferred tactical role operating in `zone` for `team`."""
-        snapshot = self.infer_formation(team)
-        return snapshot.zone_roles[zone]
+        """
+        Return the inferred tactical attacker/defender role operating in `zone`.
+        In attack phase:
+          - Z4: Receptor Delantero (OUTSIDE_1)
+          - Z3: Central Delantero (MIDDLE_1)
+          - Z2: Opuesto / Punta Derecha (OPPOSITE)
+          - Z6: Receptor Zaguero - Pipe (OUTSIDE_2, never Libero)
+          - Z1: Opuesto Zaguero (OPPOSITE)
+          - Z5: Líbero en Defensa (LIBERO)
+        """
+        canonical_attack_roles: Dict[CourtZone, PlayerRole] = {
+            CourtZone.Z4: PlayerRole.OUTSIDE_1,
+            CourtZone.Z3: PlayerRole.MIDDLE_1,
+            CourtZone.Z2: PlayerRole.OPPOSITE,
+            CourtZone.Z6: PlayerRole.OUTSIDE_2,
+            CourtZone.Z1: PlayerRole.OPPOSITE,
+            CourtZone.Z5: PlayerRole.LIBERO,
+        }
+        return canonical_attack_roles[zone]

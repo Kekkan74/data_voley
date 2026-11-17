@@ -898,10 +898,27 @@
 
       </div>
 
-      <!-- 3. CONTROL DE ROTACIÓN ACTUAL (R1 - R6) -->
+      <!-- 3. NUEVO GRÁFICO: COLOCACIONES EXITOSAS Y FALLADAS (Y HACIA DÓNDE SON MÁS/MENOS EXITOSAS) -->
+      <div class="card">
+        <div class="card-title" style="flex-wrap:wrap; gap:8px;">
+          <span id="title-chart-settings">👐 Colocaciones Exitosas vs Falladas y Hacia Qué Zona</span>
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <span id="best-set-target-badge" style="font-size:0.78rem; background:rgba(16,185,129,0.16); border:1px solid var(--green); color:#34d399; padding:3px 9px; border-radius:6px; font-weight:700;"></span>
+            <span id="worst-set-target-badge" style="font-size:0.78rem; background:rgba(239,68,68,0.16); border:1px solid var(--red); color:#f87171; padding:3px 9px; border-radius:6px; font-weight:700;"></span>
+          </div>
+        </div>
+        <div class="visual-bars" id="chart-settings"></div>
+        <div class="legend-simple">
+          <span><i class="dot-swatch" style="background:var(--green)"></i>Exitosa: Asistencia de Punto</span>
+          <span><i class="dot-swatch" style="background:var(--cyan)"></i>Exitosa: Pase Bueno en Juego</span>
+          <span><i class="dot-swatch" style="background:var(--red)"></i>Fallada: Dobles / Pase Impreciso</span>
+        </div>
+      </div>
+
+      <!-- 4. CONTROL DE ROTACIÓN ACTUAL (R1 - R6) -->
       <div class="card">
         <div class="card-title">
-          <span>🔄 Rotación Actual en Pista (R1 a R6)</span>
+          <span>🔄 Rotación Actual en Pista (R1 a R6) — En Defensa el Líbero siempre cierra en Zona 5</span>
           <span class="card-subtitle" id="setter-info-text">Rota automáticamente al recuperar el saque</span>
         </div>
         <div class="rot-grid" id="rot-grid"></div>
@@ -1198,6 +1215,8 @@
         `📊 Remates por Zona (${scopeTitle})`;
       document.getElementById('title-chart-serves').textContent =
         `🎯 Saques por Rotación (${scopeTitle})`;
+      document.getElementById('title-chart-settings').textContent =
+        `👐 Colocaciones Exitosas vs Falladas y Hacia Qué Zona (${scopeTitle})`;
 
       // 3. Tarjetas Comparativas (Partido Entero vs cada Set)
       const sumEl = document.getElementById('summary-cards');
@@ -1279,6 +1298,44 @@
           </div>
         `;
         servesEl.appendChild(item);
+      }
+
+      // 5B. Gráfico 3: Colocaciones Exitosas vs Falladas y Hacia Qué Zona
+      const setSt = state.analytics.setting_stats;
+      if (setSt) {
+        const bestT = setSt.most_successful_target;
+        const worstT = setSt.least_successful_target;
+        document.getElementById('best-set-target-badge').textContent =
+          `✅ Más exitosa: ${bestT.label} (${(bestT.success_rate * 100).toFixed(0)}% éxito)`;
+        document.getElementById('worst-set-target-badge').textContent =
+          `⚠️ Menos exitosa: ${worstT.label} (${worstT.failed} fallos / ${(worstT.success_rate * 100).toFixed(0)}% éxito)`;
+
+        const settingsEl = document.getElementById('chart-settings');
+        settingsEl.innerHTML = '';
+        ['Z4', 'Z2', 'Z3', 'Z6', 'Z1'].forEach((zKey) => {
+          const zb = setSt.by_target_zone[zKey];
+          if (!zb) return;
+          const tot = zb.total || 0;
+          const kPct = tot > 0 ? (zb.assist_kills / tot) * 100 : 0;
+          const gPct = tot > 0 ? (zb.good_sets / tot) * 100 : 0;
+          const fPct = tot > 0 ? (zb.failed / tot) * 100 : 0;
+          const sRate = (zb.success_rate * 100).toFixed(0);
+
+          const item = document.createElement('div');
+          item.className = 'bar-item';
+          item.innerHTML = `
+            <div class="bar-header">
+              <strong>${zb.label}</strong>
+              <span>Exitosas: ${zb.successful}/${tot} (${sRate}%) • Falladas: ${zb.failed} (Dobles: ${zb.error_doubles}, Mal pase: ${zb.error_bad_pass})</span>
+            </div>
+            <div class="bar-rail">
+              <div class="seg-green" style="width:${kPct}%"></div>
+              <div class="seg-cyan" style="width:${gPct}%"></div>
+              <div class="seg-red" style="width:${fPct}%"></div>
+            </div>
+          `;
+          settingsEl.appendChild(item);
+        });
       }
 
       // 6. Rueda de Rotación Actual (R1-R6)

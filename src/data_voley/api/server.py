@@ -29,6 +29,7 @@ from data_voley.domain import (
     CourtZone,
     Rotation,
     ServeOutcome,
+    SetOutcome,
     TagValidationStatus,
     TeamSide,
 )
@@ -75,10 +76,19 @@ ROLE_NAMES_ES: Dict[str, str] = {
     "SETTER": "Colocador",
     "OPPOSITE": "Opuesto",
     "OUTSIDE_1": "Receptor 1",
-    "OUTSIDE_2": "Receptor 2",
+    "OUTSIDE_2": "Receptor Zaguero",
     "MIDDLE_1": "Central 1",
     "MIDDLE_2": "Central 2",
-    "LIBERO": "Líbero",
+    "LIBERO": "Líbero (Def. 5)",
+}
+
+ZONE_ATTACK_ROLE_LABELS_ES: Dict[int, str] = {
+    4: "Receptor / Punta (Z4)",
+    3: "Central — Primer Tiempo (Z3)",
+    2: "Opuesto / Punta Derecha (Z2)",
+    6: "Receptor Zaguero — Pipe (Z6)",
+    1: "Opuesto Zaguero (Z1)",
+    5: "Líbero (Defensa en 5 — Sin remate)",
 }
 
 
@@ -285,6 +295,12 @@ class StudioSession:
                             set_override=s_num,
                         )
                     if not is_ace:
+                        self.stats.record_setting_action(
+                            team=TeamSide.HOME,
+                            target_zone=o_zone,
+                            outcome=SetOutcome.ASSIST_KILL,
+                            set_override=s_num,
+                        )
                         ev = self.stats.record_attack(
                             team=TeamSide.HOME,
                             origin_zone=o_zone,
@@ -331,6 +347,21 @@ class StudioSession:
                                 if rng.random() < 0.5
                                 else AttackOutcome.IN_PLAY
                             )
+                        )
+                        set_out = (
+                            SetOutcome.GOOD_SET
+                            if atk_err == AttackOutcome.IN_PLAY
+                            else (
+                                SetOutcome.ERROR_DOUBLES
+                                if rng.random() < 0.35
+                                else SetOutcome.ERROR_BAD_PASS
+                            )
+                        )
+                        self.stats.record_setting_action(
+                            team=TeamSide.HOME,
+                            target_zone=o_zone,
+                            outcome=set_out,
+                            set_override=s_num,
                         )
                         ev = self.stats.record_attack(
                             team=TeamSide.HOME,
@@ -525,13 +556,17 @@ def _serialize_state() -> Dict[str, Any]:
     home_zone_stats = {
         f"Z{z.value}": {
             **st,
-            "role": home_form.zone_roles[z].value,
-            "role_es": ROLE_NAMES_ES.get(home_form.zone_roles[z].value, home_form.zone_roles[z].value),
+            "role": SESSION.tactical.infer_role_at_zone(TeamSide.HOME, z).value,
+            "role_es": ZONE_ATTACK_ROLE_LABELS_ES[z.value],
         }
         for z, st in SESSION.stats.get_attack_stats_by_zone(
             TeamSide.HOME, set_number=set_filter
         ).items()
     }
+
+    home_setting_stats = SESSION.stats.get_setting_stats(
+        TeamSide.HOME, set_number=set_filter
+    )
 
     home_rot_atk = {
         r.name: st
@@ -645,6 +680,7 @@ def _serialize_state() -> Dict[str, Any]:
             "attack_by_zone": home_zone_stats,
             "attack_by_rotation": home_rot_atk,
             "serves_by_rotation": home_srv_rot,
+            "setting_stats": home_setting_stats,
             "most_vulnerable_rotation": {
                 "rotation": worst_rot.name,
                 "errors": worst_err_count,

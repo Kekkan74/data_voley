@@ -13,6 +13,7 @@ from data_voley.domain.enums import (
     PlayerRole,
     Rotation,
     ServeOutcome,
+    SetOutcome,
     TagValidationStatus,
     TeamSide,
 )
@@ -85,6 +86,19 @@ class AttackEvent:
     target_zone: Optional[CourtZone] = None
     origin_coord: Optional[CourtPoint2D] = None
     validation_status: TagValidationStatus = TagValidationStatus.AI_PROPOSED
+    timestamp_ms: float = 0.0
+
+
+@dataclass(frozen=True)
+class SetActionEvent:
+    """Immutable domain event representing a setter's pass (Colocación) toward an attack zone."""
+
+    set_number: int
+    rally_number: int
+    team: TeamSide
+    rotation: Rotation
+    target_zone: CourtZone
+    outcome: SetOutcome
     timestamp_ms: float = 0.0
 
 

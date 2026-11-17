@@ -15,6 +15,7 @@ from data_voley.domain.enums import (
     CourtZone,
     Rotation,
     ServeOutcome,
+    SetOutcome,
     TagValidationStatus,
     TeamSide,
 )
@@ -58,14 +59,21 @@ def test_attack_efficiency_by_zone_and_rotation() -> None:
     )
     engine = MatchStatsEngine(tactical_port=tactical)
 
-    # In R1, Zone 4 is occupied by OPPOSITE
+    # Zone 4 attack is executed by Receptor Delantero (OUTSIDE_1), Zone 6 by Receptor Zaguero (OUTSIDE_2)
     ev1 = engine.record_attack(
         team=TeamSide.HOME,
         origin_zone=CourtZone.Z4,
         outcome=AttackOutcome.KILL,
     )
     assert ev1.rotation == Rotation.R1
-    assert ev1.inferred_attacker_role.value == "OPPOSITE"
+    assert ev1.inferred_attacker_role.value == "OUTSIDE_1"
+
+    ev_pipe = engine.record_attack(
+        team=TeamSide.HOME,
+        origin_zone=CourtZone.Z6,
+        outcome=AttackOutcome.KILL,
+    )
+    assert ev_pipe.inferred_attacker_role.value == "OUTSIDE_2"  # Never LIBERO!
 
     engine.record_attack(
         team=TeamSide.HOME,
@@ -118,3 +126,28 @@ def test_hybrid_tagging_validation_and_correction() -> None:
     assert committed_event.origin_zone == CourtZone.Z4
     assert committed_event.outcome == AttackOutcome.KILL
     assert committed_event.validation_status == TagValidationStatus.HUMAN_CORRECTED
+
+
+def test_setting_stats_successful_and_failed_by_target_zone() -> None:
+    """Verify setting statistics: successful vs failed passes and best/worst target zones."""
+    tactical = TacticalState()
+    engine = MatchStatsEngine(tactical_port=tactical)
+
+    # 3 successful sets toward Zone 4 (100% success)
+    engine.record_setting_action(TeamSide.HOME, CourtZone.Z4, SetOutcome.ASSIST_KILL)
+    engine.record_setting_action(TeamSide.HOME, CourtZone.Z4, SetOutcome.ASSIST_KILL)
+    engine.record_setting_action(TeamSide.HOME, CourtZone.Z4, SetOutcome.GOOD_SET)
+
+    # 2 failed sets and 1 good set toward Zone 2 (33.3% success)
+    engine.record_setting_action(TeamSide.HOME, CourtZone.Z2, SetOutcome.ERROR_DOUBLES)
+    engine.record_setting_action(TeamSide.HOME, CourtZone.Z2, SetOutcome.ERROR_BAD_PASS)
+    engine.record_setting_action(TeamSide.HOME, CourtZone.Z2, SetOutcome.GOOD_SET)
+
+    set_stats = engine.get_setting_stats(TeamSide.HOME)
+    assert set_stats["total_sets"] == 6
+    assert set_stats["successful_sets"] == 4
+    assert set_stats["failed_sets"] == 2
+    assert set_stats["most_successful_target"]["zone"] == "Z4"
+    assert set_stats["most_successful_target"]["success_rate"] == pytest.approx(1.0)
+    assert set_stats["least_successful_target"]["zone"] == "Z2"
+    assert set_stats["least_successful_target"]["failed"] == 2

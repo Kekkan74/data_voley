@@ -119,6 +119,10 @@ def test_inferred_roles_across_rotations_without_ocr() -> None:
         expected_zone = CourtZone(rot.value)
         assert snap.setter_zone == expected_zone
         assert snap.zone_roles[expected_zone] == PlayerRole.SETTER
+        # Libero is never in Zone 6; in defense Libero always takes Zone 5 (when Setter is not in Z5)
+        assert snap.zone_roles[CourtZone.Z6] != PlayerRole.LIBERO
+        if rot != Rotation.R5:
+            assert snap.zone_roles[CourtZone.Z5] == PlayerRole.LIBERO
 
 
 def test_set_win_requires_two_point_advantage() -> None:

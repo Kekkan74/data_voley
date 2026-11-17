@@ -168,6 +168,25 @@ class AttackOutcome(str, Enum):
         )
 
 
+class SetOutcome(str, Enum):
+    """Result classification of a setter's pass/setting action (Colocación)."""
+
+    ASSIST_KILL = "ASSIST_KILL"      # Colocación exitosa que termina en punto directo
+    GOOD_SET = "GOOD_SET"            # Colocación buena que permite remate en juego
+    ERROR_DOUBLES = "ERROR_DOUBLES"  # Falta de dobles / retención pitada al colocador
+    ERROR_BAD_PASS = "ERROR_BAD_PASS"  # Colocación imprecisa / vendida que impide atacar bien
+
+    @property
+    def is_successful(self) -> bool:
+        """Return True if the setting action was accurate and playable."""
+        return self in (SetOutcome.ASSIST_KILL, SetOutcome.GOOD_SET)
+
+    @property
+    def is_error(self) -> bool:
+        """Return True if the setting action was a fault or unplayable pass."""
+        return self in (SetOutcome.ERROR_DOUBLES, SetOutcome.ERROR_BAD_PASS)
+
+
 class TagValidationStatus(str, Enum):
     """Provenance and human-in-the-loop verification status of an event tag."""
 
