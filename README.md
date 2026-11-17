@@ -94,18 +94,26 @@ Respetando la simetría de $180^\circ$ entre la pista local (`HOME`: $0 \le y \l
 
 ---
 
-## 🚀 4. Quickstart en 60 Segundos
+## 🚀 4. Quickstart en 1 Clic (`DataVoley.exe` / App Gráfica Visual)
 
 ```bash
-# 1. Instalar dependencias ligeras
-pip install -r requirements.txt
+# Opción A: Doble clic directo en el ejecutable nativo de Windows:
+./DataVoley.exe
 
-# 2. Ejecutar simulación táctica y espacial en terminal
+# Opción B: Lanzar la aplicación gráfica interactiva desde Python:
+python run_app.py
+
+# Opción C: Ejecutar simulación táctica en consola (CLI) y los 26 tests TDD:
 python main.py --demo
-
-# 3. Ejecutar suite de 23 tests unitarios (TDD)
 pytest tests/ -v
 ```
+
+### 📊 Paneles Gráficos Interactivos Incluidos en `DataVoley.exe`:
+1. **Pista 2D FIVB Teraflex Interactiva (`18m × 9m`):** Muestra las 6 zonas de ambos campos, la línea de 3 metros, los vectores de trayectoria de remates y las fichas dinámicas de los 6 jugadores (`SETTER` en oro Mikasa, `LIBERO`, `OPP`, `OH1`, `OH2`, `MB1`) moviéndose automáticamente con cada *Side-Out*. **Hacer clic en cualquier punto de la pista proyecta la homografía $H$ y registra la acción en vivo.**
+2. **Selector y Rueda de Rotaciones (`R1` – `R6`):** Permite inspeccionar o cambiar de rotación viendo al instante dónde se ubica el colocador (`Z1 → Z6 → Z5 → Z4 → Z3 → Z2`) sin necesidad de OCR.
+3. **Gráfico de Barras Apiladas — Eficiencia de Remates por Zona (`Z1` a `Z6`):** Desglose visual de *Kills* (verde esmeralda), *En Juego* (cian) y *Errores/Bloqueos* (rojo) junto al porcentaje de eficiencia ofensiva de cada zona.
+4. **Gráfico de Vulnerabilidad — Saques Fallados por Rotación (`R1` a `R6`):** Cruza los errores de saque (`Red` vs `Fuera`) y *Aces* con la rotación activa, señalando automáticamente la formación más crítica del equipo.
+5. **Consola de Etiquetado Híbrido (IA + Atajos de Teclado):** Valida (`[V]`), corrige (`[C]`) o descarta (`[D]`) las propuestas de YOLO/TrackNet o suma puntos (`[H]` / `[A]`) actualizando todos los gráficos en tiempo real.
 
 ---
 

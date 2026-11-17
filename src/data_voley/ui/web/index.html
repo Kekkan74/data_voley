@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DataVoley Studio — Analítica Espacial FIVB & Rotaciones R1-R6</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-arena: #080d18;
+      --bg-panel: #0f172a;
+      --bg-card: #15203b;
+      --border-line: #233554;
+      --mikasa-gold: #f5b700;
+      --mikasa-blue: #2563eb;
+      --teraflex-court: #1e40af;
+      --teraflex-out: #9a3412;
+      --kill-green: #10b981;
+      --inplay-cyan: #06b6d4;
+      --fault-red: #ef4444;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-arena);
+      color: var(--text-main);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* TOP BROADCAST SCOREBOARD BAR */
+    header.topbar {
+      background: linear-gradient(90deg, #0b1325 0%, #13203d 50%, #0b1325 100%);
+      border-bottom: 2px solid var(--border-line);
+      padding: 10px 22px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand-ball {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: conic-gradient(var(--mikasa-gold) 0deg 180deg, var(--mikasa-blue) 180deg 360deg);
+      border: 2px solid #fff;
+      box-shadow: 0 0 12px rgba(245, 183, 0, 0.45);
+    }
+
+    .brand h1 {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 1.35rem;
+      letter-spacing: 0.5px;
+      color: var(--text-main);
+    }
+
+    .brand span.sub {
+      display: block;
+      font-size: 0.74rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .scoreboard {
+      display: flex;
+      align-items: center;
+      background: #070b14;
+      border: 1px solid var(--border-line);
+      border-radius: 8px;
+      padding: 6px 16px;
+      gap: 18px;
+    }
+
+    .team-box {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .team-name {
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    .serve-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: transparent;
+    }
+
+    .serve-dot.active {
+      background: var(--mikasa-gold);
+      box-shadow: 0 0 8px var(--mikasa-gold);
+    }
+
+    .score-num {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--mikasa-gold);
+      min-width: 34px;
+      text-align: center;
+    }
+
+    .set-badge {
+      background: var(--mikasa-blue);
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 4px;
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    button.btn {
+      background: var(--bg-card);
+      color: var(--text-main);
+      border: 1px solid var(--border-line);
+      padding: 8px 13px;
+      border-radius: 6px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, transform 0.1s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    button.btn:hover {
+      background: #1e2f53;
+      border-color: #3b82f6;
+    }
+
+    button.btn:active {
+      transform: translateY(1px);
+    }
+
+    button.btn-gold {
+      background: var(--mikasa-gold);
+      color: #090d16;
+      border-color: var(--mikasa-gold);
+      font-weight: 700;
+    }
+
+    button.btn-gold:hover {
+      background: #ffca28;
+    }
+
+    button.btn-green {
+      background: rgba(16, 185, 129, 0.18);
+      border-color: var(--kill-green);
+      color: #34d399;
+    }
+
+    button.btn-red {
+      background: rgba(239, 68, 68, 0.18);
+      border-color: var(--fault-red);
+      color: #f87171;
+    }
+
+    /* MAIN WORKSPACE GRID */
+    main.workspace {
+      display: grid;
+      grid-template-columns: 430px 1fr;
+      gap: 16px;
+      padding: 16px 22px;
+      flex: 1;
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border-line);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      padding-bottom: 8px;
+    }
+
+    .panel-title {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 0.98rem;
+      font-weight: 700;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .mono-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--inplay-cyan);
+      background: rgba(6, 182, 212, 0.12);
+      padding: 2px 7px;
+      border-radius: 4px;
+      border: 1px solid rgba(6, 182, 212, 0.3);
+    }
+
+    /* LEFT COLUMN: 2D INTERACTIVE COURT */
+    .court-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .court-svg-container {
+      width: 100%;
+      max-width: 360px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 2px solid #334155;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+      cursor: crosshair;
+      position: relative;
+    }
+
+    .court-controls {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .control-group {
+      background: var(--bg-card);
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--border-line);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .control-group label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+    }
+
+    .control-group select {
+      background: #090e1a;
+      color: var(--text-main);
+      border: 1px solid var(--border-line);
+      padding: 5px 8px;
+      border-radius: 4px;
+      font-size: 0.82rem;
+      font-family: 'Inter', sans-serif;
+    }
+
+    .homography-readout {
+      width: 100%;
+      background: #080c16;
+      border: 1px solid var(--border-line);
+      border-radius: 6px;
+      padding: 8px 12px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* RIGHT COLUMN: DASHBOARD CHARTS */
+    .right-column {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    /* ROTATION SELECTOR STRIP */
+    .rotation-strip {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 8px;
+    }
+
+    .rot-pill {
+      background: var(--bg-card);
+      border: 1px solid var(--border-line);
+      border-radius: 6px;
+      padding: 8px 6px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .rot-pill:hover {
+      border-color: var(--mikasa-gold);
+    }
+
+    .rot-pill.active {
+      background: rgba(245, 183, 0, 0.16);
+      border: 2px solid var(--mikasa-gold);
+    }
+
+    .rot-pill .rot-id {
+      font-family: 'Chakra Petch', sans-serif;
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: var(--mikasa-gold);
+    }
+
+    .rot-pill .rot-sub {
+      font-size: 0.68rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* BAR CHARTS */
+    .chart-rows {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .chart-row {
+      display: grid;
+      grid-template-columns: 115px 1fr 95px;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.8rem;
+    }
+
+    .chart-label {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .chart-label strong {
+      color: #f1f5f9;
+      font-size: 0.82rem;
+    }
+
+    .chart-label span {
+      font-size: 0.69rem;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .bar-track {
+      height: 18px;
+      background: #090e1a;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .bar-seg-kill {
+      background: var(--kill-green);
+      height: 100%;
+      transition: width 0.35s ease;
+    }
+
+    .bar-seg-inplay {
+      background: var(--inplay-cyan);
+      height: 100%;
+      transition: width 0.35s ease;
+    }
+
+    .bar-seg-err {
+      background: var(--fault-red);
+      height: 100%;
+      transition: width 0.35s ease;
+    }
+
+    .chart-metric {
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+    }
+
+    .legend-row {
+      display: flex;
+      gap: 14px;
+      font-size: 0.73rem;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .legend-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+
+    /* HYBRID AI TAGGING & LOG PANEL */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 380px 1fr;
+      gap: 14px;
+    }
+
+    .ai-proposal-box {
+      background: linear-gradient(135deg, #131f3a 0%, #0d1527 100%);
+      border: 1px solid #3b82f6;
+      border-radius: 8px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .ai-proposal-details {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 6px;
+      font-size: 0.8rem;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 8px 10px;
+      border-radius: 6px;
+    }
+
+    .hotkey-bar {
+      display: flex;
+      gap: 8px;
+    }
+
+    kbd {
+      background: #070b14;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      padding: 1px 6px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--mikasa-gold);
+    }
+
+    /* EVENTS TABLE */
+    .events-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+    }
+
+    .events-table th {
+      text-align: left;
+      color: var(--text-muted);
+      font-weight: 600;
+      padding: 6px 8px;
+      border-bottom: 1px solid var(--border-line);
+    }
+
+    .events-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .badge-kill {
+      color: #34d399;
+      font-weight: 600;
+    }
+
+    .badge-err {
+      color: #f87171;
+      font-weight: 600;
+    }
+
+    @media (max-width: 1150px) {
+      main.workspace {
+        grid-template-columns: 1fr;
+      }
+      .charts-grid, .bottom-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP SCOREBOARD & MATCH CONTROLS -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-ball"></div>
+      <div>
+        <h1>DATA_VOLEY STUDIO</h1>
+        <span class="sub" id="stream-label">HLS STREAM: https://stream.fivb.org/live/vnl_court_cam1.m3u8</span>
+      </div>
+    </div>
+
+    <div class="scoreboard">
+      <div class="team-box">
+        <div class="serve-dot" id="serve-home"></div>
+        <span class="team-name">HOME (LOCAL)</span>
+        <span class="score-num" id="score-home">0</span>
+      </div>
+      <div class="set-badge" id="set-indicator">SET 1 (0 - 0)</div>
+      <div class="team-box">
+        <span class="score-num" id="score-away">0</span>
+        <span class="team-name">AWAY (VISITANTE)</span>
+        <div class="serve-dot" id="serve-away"></div>
+      </div>
+    </div>
+
+    <div class="top-actions">
+      <button class="btn btn-green" onclick="scorePoint('HOME')" title="Atajo: Tecla H">
+        + Punto HOME <kbd>H</kbd>
+      </button>
+      <button class="btn btn-red" onclick="scorePoint('AWAY')" title="Atajo: Tecla A">
+        + Punto AWAY <kbd>A</kbd>
+      </button>
+      <button class="btn" onclick="resetMatch()">
+        Reiniciar Datos Demo
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN COCKPIT -->
+  <main class="workspace">
+
+    <!-- LEFT COLUMN: INTERACTIVE 2D FIVB COURT + HOMOGRAPHY -->
+    <section class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          📐 PISTA 2D FIVB & HOMOGRAFÍA (18m × 9m)
+        </div>
+        <span class="mono-tag">Click en pista = Registrar Acción</span>
+      </div>
+
+      <div class="court-wrapper">
+        <div class="court-svg-container">
+          <svg id="court-svg" viewBox="0 0 360 660" width="100%" height="100%" onclick="handleCourtClick(event)">
+            <defs>
+              <marker id="arrow-kill" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#10b981" />
+              </marker>
+              <marker id="arrow-err" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#ef4444" />
+              </marker>
+              <marker id="arrow-inplay" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
+              </marker>
+            </defs>
+
+            <!-- Outer Free Zone (Teraflex Coral/Orange) -->
+            <rect x="0" y="0" width="360" height="660" fill="#7c2d12" />
+
+            <!-- Official 9m x 18m Playing Court (x: 45..315 [270px = 9m], y: 60..600 [540px = 18m]) -->
+            <!-- Scale: 30px per meter! -->
+            <rect x="45" y="60" width="270" height="540" fill="#1e40af" stroke="#ffffff" stroke-width="3" />
+
+            <!-- Zone Grid Dividers (subtle) -->
+            <line x1="135" y1="60" x2="135" y2="600" stroke="rgba(255,255,255,0.14)" stroke-width="1" stroke-dasharray="4,4" />
+            <line x1="225" y1="60" x2="225" y2="600" stroke="rgba(255,255,255,0.14)" stroke-width="1" stroke-dasharray="4,4" />
+
+            <!-- AWAY 3m Attack Line (y = 12m from HOME -> svg y = 600 - 12*30 = 240) -->
+            <line x1="45" y1="240" x2="315" y2="240" stroke="#ffffff" stroke-width="2.5" />
+
+            <!-- HOME 3m Attack Line (y = 6m from HOME -> svg y = 600 - 6*30 = 420) -->
+            <line x1="45" y1="420" x2="315" y2="420" stroke="#ffffff" stroke-width="2.5" />
+
+            <!-- CENTER NET LINE (y = 9m -> svg y = 330) -->
+            <line x1="30" y1="330" x2="330" y2="330" stroke="#f5b700" stroke-width="4" />
+            <text x="180" y="324" fill="#f5b700" font-size="10" font-family="JetBrains Mono" font-weight="bold" text-anchor="middle">RED / NET (y = 9.0m)</text>
+
+            <!-- AWAY ZONE WATERMARKS (Top Half: rotated 180 deg) -->
+            <text x="90" y="145" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z1</text>
+            <text x="180" y="145" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z6</text>
+            <text x="270" y="145" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z5</text>
+            <text x="90" y="290" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z2</text>
+            <text x="180" y="290" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z3</text>
+            <text x="270" y="290" fill="rgba(255,255,255,0.22)" font-size="22" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z4</text>
+
+            <!-- HOME ZONE WATERMARKS (Bottom Half) -->
+            <text x="90" y="385" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z4</text>
+            <text x="180" y="385" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z3</text>
+            <text x="270" y="385" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z2</text>
+            <text x="90" y="520" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z5</text>
+            <text x="180" y="520" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z6</text>
+            <text x="270" y="520" fill="rgba(255,255,255,0.28)" font-size="24" font-family="Chakra Petch" font-weight="bold" text-anchor="middle">Z1</text>
+
+            <!-- Dynamic Trajectory Vectors Layer -->
+            <g id="trajectories-layer"></g>
+
+            <!-- Dynamic Player Nodes Layer (HOME) -->
+            <g id="players-layer"></g>
+
+            <!-- Last Clicked Coordinate Marker -->
+            <circle id="click-marker" cx="-50" cy="-50" r="6" fill="#f5b700" stroke="#ffffff" stroke-width="2" />
+          </svg>
+        </div>
+
+        <div class="court-controls">
+          <div class="control-group">
+            <label>Resultado al hacer Click en Pista</label>
+            <select id="click-outcome">
+              <option value="KILL">Remate Punto (KILL)</option>
+              <option value="IN_PLAY">Remate Defendido (IN_PLAY)</option>
+              <option value="BLOCKED">Remate Bloqueado (BLOCKED)</option>
+              <option value="ERROR_NET">Error en la Red (ERROR_NET)</option>
+              <option value="ERROR_OUT">Error Fuera (ERROR_OUT)</option>
+            </select>
+          </div>
+          <div class="control-group">
+            <label>Zona Destino del Remate</label>
+            <select id="click-target-zone">
+              <option value="5">Hacia Zona 5 (Diagonal Larga)</option>
+              <option value="1">Hacia Zona 1 (Paralela / Línea)</option>
+              <option value="6">Hacia Zona 6 (Fondo Centro)</option>
+              <option value="3">Hacia Zona 3 (Finta Corta)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="homography-readout" id="homography-readout">
+          <span>Homografía H: Activa (9.0m × 18.0m)</span>
+          <span id="coord-readout">Haz click en la pista 2D</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT COLUMN: ROTATIONS & ANALYTICAL CHARTS -->
+    <div class="right-column">
+
+      <!-- ROTATION STATE MACHINE STRIP (R1-R6) -->
+      <section class="panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            🔄 MÁQUINA DE ESTADOS DE ROTACIÓN (R1 – R6) & INFERENCIA DE ROLES SIN OCR
+          </div>
+          <span class="mono-tag" id="setter-status-badge">Colocador en Zona 1</span>
+        </div>
+        <div class="rotation-strip" id="rotation-strip"></div>
+      </section>
+
+      <!-- TWO MAIN CHARTS -->
+      <div class="charts-grid">
+
+        <!-- CHART 1: ATTACK EFFICIENCY BY ZONE -->
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">📊 REMATES POR ZONA DE ORIGEN (Z1–Z6)</div>
+            <span class="mono-tag">Eficiencia = (K - E) / Tot</span>
+          </div>
+          <div class="chart-rows" id="attack-zone-chart"></div>
+          <div class="legend-row">
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--kill-green)"></span> Punto Directo (Kill)</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--inplay-cyan)"></span> En Juego</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--fault-red)"></span> Error / Bloqueado</div>
+          </div>
+        </section>
+
+        <!-- CHART 2: SERVE ERRORS & VULNERABILITY BY ROTATION -->
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🎯 SAQUES Y ERRORES POR ROTACIÓN (R1–R6)</div>
+            <span class="mono-tag" id="vulnerable-rot-badge" style="color:#f87171; border-color:#ef4444;">Crítica: R3</span>
+          </div>
+          <div class="chart-rows" id="serve-rot-chart"></div>
+          <div class="legend-row">
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--kill-green)"></span> Ace</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--inplay-cyan)"></span> En Juego</div>
+            <div class="legend-item"><span class="legend-swatch" style="background:var(--fault-red)"></span> Fallo (Red / Fuera)</div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- BOTTOM PANEL: HYBRID TAGGING + LIVE EVENT FEED -->
+      <div class="bottom-grid">
+
+        <!-- HYBRID TAGGING CONTROLLER -->
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">🤖 ETIQUETADO HÍBRIDO (IA + HOTKEYS)</div>
+            <span class="mono-tag" id="ai-confidence-tag">YOLO + TrackNet</span>
+          </div>
+          <div class="ai-proposal-box">
+            <div style="font-size:0.78rem; color:var(--text-muted);">
+              Propuesta detectada automáticamente en el stream:
+            </div>
+            <div class="ai-proposal-details" id="ai-proposal-details"></div>
+            <div class="hotkey-bar">
+              <button class="btn btn-green" style="flex:1" onclick="sendHybridTag('v')">
+                Validar <kbd>V</kbd>
+              </button>
+              <button class="btn btn-gold" style="flex:1" onclick="sendHybridTag('c')">
+                Corregir <kbd>C</kbd>
+              </button>
+              <button class="btn btn-red" onclick="sendHybridTag('d')">
+                <kbd>D</kbd>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- RECENT EVENTS LOG -->
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">📋 REGISTRO CRONOLÓGICO DE ACCIONES VALIDADAS</div>
+            <span class="mono-tag">100% Fiabilidad</span>
+          </div>
+          <div style="overflow-x:auto;">
+            <table class="events-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Rotación</th>
+                  <th>Origen → Destino</th>
+                  <th>Rol Inferido</th>
+                  <th>Resultado</th>
+                  <th>Verificación</th>
+                </tr>
+              </thead>
+              <tbody id="events-tbody"></tbody>
+            </table>
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <script>
+    const HOME_ZONE_SVG_COORDS = {
+      "1": { cx: 270, cy: 510 },
+      "2": { cx: 270, cy: 375 },
+      "3": { cx: 180, cy: 375 },
+      "4": { cx: 90,  cy: 375 },
+      "5": { cx: 90,  cy: 510 },
+      "6": { cx: 180, cy: 510 }
+    };
+
+    function courtMetersToSvg(x_m, y_m) {
+      // x: 0..9m -> 45..315px (30px/m)
+      // y: 0..18m -> 600..60px (30px/m inverted)
+      return {
+        x: 45 + (x_m * 30.0),
+        y: 600 - (y_m * 30.0)
+      };
+    }
+
+    function svgToCourtMeters(svgX, svgY) {
+      return {
+        x: (svgX - 45.0) / 30.0,
+        y: (600.0 - svgY) / 30.0
+      };
+    }
+
+    async function fetchState() {
+      const res = await fetch('/api/state');
+      const state = await res.json();
+      renderStudio(state);
+    }
+
+    async function scorePoint(winner) {
+      const res = await fetch('/api/rally', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ winner })
+      });
+      const state = await res.json();
+      renderStudio(state);
+    }
+
+    async function selectRotation(rotNum) {
+      const res = await fetch('/api/rotation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ team: 'HOME', rotation: rotNum })
+      });
+      const state = await res.json();
+      renderStudio(state);
+    }
+
+    async function handleCourtClick(evt) {
+      const svg = document.getElementById('court-svg');
+      const pt = svg.createSVGPoint();
+      pt.x = evt.clientX;
+      pt.y = evt.clientY;
+      const svgP = pt.matrixTransform(svg.getScreenCTM().inverse());
+      const meters = svgToCourtMeters(svgP.x, svgP.y);
+
+      const marker = document.getElementById('click-marker');
+      marker.setAttribute('cx', svgP.x);
+      marker.setAttribute('cy', svgP.y);
+
+      const outcome = document.getElementById('click-outcome').value;
+      const targetZone = parseInt(document.getElementById('click-target-zone').value, 10);
+
+      const res = await fetch('/api/court-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          x: meters.x,
+          y: meters.y,
+          action_type: 'ATTACK',
+          outcome: outcome,
+          target_zone: targetZone
+        })
+      });
+      const state = await res.json();
+      renderStudio(state);
+
+      if (state.last_mapped_point) {
+        const mp = state.last_mapped_point;
+        document.getElementById('coord-readout').textContent =
+          `Cam(${mp.pixel_u},${mp.pixel_v}) → (${mp.x}m, ${mp.y}m) [${mp.team_side} ${mp.zone}]`;
+      }
+    }
+
+    async function sendHybridTag(hotkey) {
+      const correctedOutcome = hotkey === 'c' ? document.getElementById('click-outcome').value : null;
+      const res = await fetch('/api/hybrid-tag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          hotkey: hotkey,
+          corrected_outcome: correctedOutcome
+        })
+      });
+      const state = await res.json();
+      renderStudio(state);
+    }
+
+    async function resetMatch() {
+      const res = await fetch('/api/reset', { method: 'POST' });
+      const state = await res.json();
+      renderStudio(state);
+    }
+
+    function renderStudio(state) {
+      // 1. Scoreboard
+      document.getElementById('score-home').textContent = state.match.home_score;
+      document.getElementById('score-away').textContent = state.match.away_score;
+      document.getElementById('set-indicator').textContent =
+        `SET ${state.match.current_set} (${state.match.sets_won.HOME} - ${state.match.sets_won.AWAY})`;
+
+      document.getElementById('serve-home').className =
+        'serve-dot' + (state.match.serving_team === 'HOME' ? ' active' : '');
+      document.getElementById('serve-away').className =
+        'serve-dot' + (state.match.serving_team === 'AWAY' ? ' active' : '');
+
+      // 2. Rotation Strip (R1-R6)
+      const homeTac = state.tactical.HOME;
+      document.getElementById('setter-status-badge').textContent =
+        `HOME ${homeTac.rotation} • Colocador en Z${homeTac.setter_zone} (${homeTac.setter_is_front_row ? 'Delantero' : 'Zaguero'})`;
+
+      const setterZones = { 1: 'Z1', 2: 'Z6', 3: 'Z5', 4: 'Z4', 5: 'Z3', 6: 'Z2' };
+      const stripEl = document.getElementById('rotation-strip');
+      stripEl.innerHTML = '';
+      for (let r = 1; r <= 6; r++) {
+        const pill = document.createElement('div');
+        pill.className = 'rot-pill' + (homeTac.rotation_num === r ? ' active' : '');
+        pill.onclick = () => selectRotation(r);
+        pill.innerHTML = `
+          <div class="rot-id">R${r}</div>
+          <div class="rot-sub">Colocador: ${setterZones[r]}</div>
+        `;
+        stripEl.appendChild(pill);
+      }
+
+      // 3. Draw 2D Court Players & Trajectories
+      const trajLayer = document.getElementById('trajectories-layer');
+      trajLayer.innerHTML = '';
+      state.trajectories.forEach((t) => {
+        const p1 = courtMetersToSvg(t.start_x, t.start_y);
+        const p2 = courtMetersToSvg(t.end_x, t.end_y);
+        let color = '#06b6d4';
+        let marker = 'url(#arrow-inplay)';
+        if (t.outcome === 'KILL') {
+          color = '#10b981';
+          marker = 'url(#arrow-kill)';
+        } else if (t.outcome.startsWith('ERROR') || t.outcome === 'BLOCKED') {
+          color = '#ef4444';
+          marker = 'url(#arrow-err)';
+        }
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', p1.x);
+        line.setAttribute('y1', p1.y);
+        line.setAttribute('x2', p2.x);
+        line.setAttribute('y2', p2.y);
+        line.setAttribute('stroke', color);
+        line.setAttribute('stroke-width', '2.4');
+        line.setAttribute('stroke-opacity', '0.85');
+        line.setAttribute('marker-end', marker);
+        trajLayer.appendChild(line);
+      });
+
+      const playersLayer = document.getElementById('players-layer');
+      playersLayer.innerHTML = '';
+      Object.entries(homeTac.zones).forEach(([zoneNum, role]) => {
+        const pos = HOME_ZONE_SVG_COORDS[zoneNum];
+        const isSetter = role === 'SETTER';
+        const isLibero = role === 'LIBERO';
+        const fill = isSetter ? '#f5b700' : (isLibero ? '#06b6d4' : '#0f172a');
+        const textFill = (isSetter || isLibero) ? '#090d16' : '#ffffff';
+
+        const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        g.innerHTML = `
+          <circle cx="${pos.cx}" cy="${pos.cy}" r="18" fill="${fill}" stroke="#ffffff" stroke-width="2" />
+          <text x="${pos.cx}" y="${pos.cy + 4}" fill="${textFill}" font-size="9.5" font-family="JetBrains Mono" font-weight="bold" text-anchor="middle">
+            ${role.replace('OUTSIDE_', 'OH').replace('MIDDLE_', 'MB').replace('OPPOSITE', 'OPP').replace('SETTER', 'SET')}
+          </text>
+        `;
+        playersLayer.appendChild(g);
+      });
+
+      // 4. Render Chart 1: Attack Efficiency by Zone (Z1-Z6)
+      const atkChart = document.getElementById('attack-zone-chart');
+      atkChart.innerHTML = '';
+      for (let z = 1; z <= 6; z++) {
+        const key = `Z${z}`;
+        const st = state.analytics.attack_by_zone[key];
+        const att = st.attempts || 0;
+        const kPct = att > 0 ? (st.kills / att) * 100 : 0;
+        const iPct = att > 0 ? (st.in_play / att) * 100 : 0;
+        const ePct = att > 0 ? (st.errors / att) * 100 : 0;
+        const effStr = (st.efficiency * 100).toFixed(0) + '%';
+
+        const row = document.createElement('div');
+        row.className = 'chart-row';
+        row.innerHTML = `
+          <div class="chart-label">
+            <strong>Zona ${z} (${st.role.replace('OUTSIDE_', 'OH').replace('MIDDLE_', 'MB')})</strong>
+            <span>${att} int • ${st.kills} pts</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-seg-kill" style="width:${kPct}%"></div>
+            <div class="bar-seg-inplay" style="width:${iPct}%"></div>
+            <div class="bar-seg-err" style="width:${ePct}%"></div>
+          </div>
+          <div class="chart-metric" style="color:${st.efficiency >= 0.25 ? '#34d399' : '#f8fafc'}">
+            Efic: ${effStr}
+          </div>
+        `;
+        atkChart.appendChild(row);
+      }
+
+      // 5. Render Chart 2: Serve Errors by Rotation (R1-R6)
+      const vuln = state.analytics.most_vulnerable_rotation;
+      document.getElementById('vulnerable-rot-badge').textContent =
+        `Más fallos: ${vuln.rotation} (${vuln.errors} err)`;
+
+      const srvChart = document.getElementById('serve-rot-chart');
+      srvChart.innerHTML = '';
+      for (let r = 1; r <= 6; r++) {
+        const rKey = `R${r}`;
+        const sb = state.analytics.serves_by_rotation[rKey];
+        const tot = sb.TOTAL_SERVES || 0;
+        const aPct = tot > 0 ? (sb.ACE / tot) * 100 : 0;
+        const pPct = tot > 0 ? (sb.IN_PLAY / tot) * 100 : 0;
+        const errPct = tot > 0 ? (sb.TOTAL_ERRORS / tot) * 100 : 0;
+
+        const row = document.createElement('div');
+        row.className = 'chart-row';
+        row.innerHTML = `
+          <div class="chart-label">
+            <strong>Rotación ${rKey}</strong>
+            <span>Red:${sb.ERROR_NET} | Fuera:${sb.ERROR_OUT}</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-seg-kill" style="width:${aPct}%"></div>
+            <div class="bar-seg-inplay" style="width:${pPct}%"></div>
+            <div class="bar-seg-err" style="width:${errPct}%"></div>
+          </div>
+          <div class="chart-metric" style="color:${sb.TOTAL_ERRORS > 1 ? '#f87171' : '#cbd5e1'}">
+            ${sb.TOTAL_ERRORS} err / ${tot}
+          </div>
+        `;
+        srvChart.appendChild(row);
+      }
+
+      // 6. Render AI Proposal
+      if (state.ai_proposal) {
+        const p = state.ai_proposal;
+        document.getElementById('ai-confidence-tag').textContent = `Confianza IA: ${(p.confidence * 100).toFixed(0)}%`;
+        document.getElementById('ai-proposal-details').innerHTML = `
+          <div><strong>Origen:</strong> Zona ${p.origin_zone}</div>
+          <div><strong>Destino:</strong> Zona ${p.target_zone}</div>
+          <div><strong>Rol Inferido:</strong> ${p.inferred_role}</div>
+          <div><strong>Predicción:</strong> ${p.outcome}</div>
+        `;
+      }
+
+      // 7. Render Recent Events Table
+      const tbody = document.getElementById('events-tbody');
+      tbody.innerHTML = '';
+      state.recent_attacks.forEach((ev) => {
+        const tr = document.createElement('tr');
+        const isKill = ev.outcome === 'KILL';
+        const isErr = ev.outcome.startsWith('ERROR') || ev.outcome === 'BLOCKED';
+        tr.innerHTML = `
+          <td>#${ev.rally}</td>
+          <td>${ev.rotation}</td>
+          <td>${ev.origin_zone} → ${ev.target_zone}</td>
+          <td>${ev.role}</td>
+          <td class="${isKill ? 'badge-kill' : (isErr ? 'badge-err' : '')}">${ev.outcome}</td>
+          <td>${ev.status.replace('HUMAN_', '')}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Keyboard shortcuts for Hybrid Tagging & Match Control
+    window.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'SELECT' || e.target.tagName === 'INPUT') return;
+      const k = e.key.toLowerCase();
+      if (k === 'v' || k === 'c' || k === 'd') {
+        sendHybridTag(k);
+      } else if (k === 'h') {
+        scorePoint('HOME');
+      } else if (k === 'a') {
+        scorePoint('AWAY');
+      }
+    });
+
+    fetchState();
+  </script>
+</body>
+</html>
