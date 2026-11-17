@@ -681,11 +681,11 @@
             <label class="field-label">Rotación inicial de tu equipo</label>
             <select id="input-init-rotation" class="select-input">
               <option value="1">R1 — Colocador empieza en Zona 1 (Zaguero)</option>
-              <option value="2">R2 — Colocador empieza en Zona 6 (Zaguero)</option>
-              <option value="3">R3 — Colocador empieza en Zona 5 (Zaguero)</option>
+              <option value="2">R2 — Colocador empieza en Zona 2 (Delantero)</option>
+              <option value="3">R3 — Colocador empieza en Zona 3 (Delantero)</option>
               <option value="4">R4 — Colocador empieza en Zona 4 (Delantero)</option>
-              <option value="5">R5 — Colocador empieza en Zona 3 (Delantero)</option>
-              <option value="6">R6 — Colocador empieza en Zona 2 (Delantero)</option>
+              <option value="5">R5 — Colocador empieza en Zona 5 (Zaguero)</option>
+              <option value="6">R6 — Colocador empieza en Zona 6 (Zaguero)</option>
             </select>
           </div>
           <div>
@@ -1286,7 +1286,7 @@
       document.getElementById('setter-info-text').textContent =
         `Ahora en ${homeTac.rotation}: El Colocador está en Zona ${homeTac.setter_zone} (${homeTac.setter_is_front_row ? 'Delantero' : 'Zaguero'})`;
 
-      const setterZones = { 1: 'Zona 1', 2: 'Zona 6', 3: 'Zona 5', 4: 'Zona 4', 5: 'Zona 3', 6: 'Zona 2' };
+      const setterZones = { 1: 'Zona 1', 2: 'Zona 2', 3: 'Zona 3', 4: 'Zona 4', 5: 'Zona 5', 6: 'Zona 6' };
       const rotGrid = document.getElementById('rot-grid');
       rotGrid.innerHTML = '';
       for (let r = 1; r <= 6; r++) {

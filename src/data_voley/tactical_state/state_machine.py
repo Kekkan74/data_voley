@@ -194,8 +194,9 @@ class TacticalState:
 
         zone_roles: Dict[CourtZone, PlayerRole] = {}
         for base_zone, role in self.BASE_R1_ROLE_BY_ZONE.items():
-            # Apply clockwise shift (k - 1) times: z_k = ((z_0 - k) mod 6) + 1
-            current_zone_num = ((base_zone.value - k) % 6) + 1
+            # Direct mapping where R_k places Setter (base_zone=1) at CourtZone k:
+            # z(R_k) = ((z_0 + k - 2) mod 6) + 1
+            current_zone_num = ((base_zone.value + k - 2) % 6) + 1
             current_zone = CourtZone(current_zone_num)
 
             # Apply FIVB Rule 19: Libero replaces Middle Blocker in back-row defense zones (Z5, Z6)

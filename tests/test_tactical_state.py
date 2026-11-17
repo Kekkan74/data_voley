@@ -49,7 +49,7 @@ def test_break_point_retains_serve_without_rotation() -> None:
 def test_side_out_triggers_clockwise_rotation_for_receiving_team_only() -> None:
     """
     When the receiving team wins the rally (Side-Out), they recover serve
-    and advance 1 clockwise rotation (R_t -> R_{t+1}), while the former server stays put.
+    and rotate clockwise (Z1 -> Z6 -> Z5 -> Z4 -> Z3 -> Z2 -> Z1), so R3 -> R2 and R1 -> R6.
     """
     state = TacticalState(
         home_initial_rotation=Rotation.R1,
@@ -57,23 +57,23 @@ def test_side_out_triggers_clockwise_rotation_for_receiving_team_only() -> None:
         initial_server=TeamSide.HOME,
     )
 
-    # AWAY wins the rally -> Side-Out for AWAY
+    # AWAY wins the rally -> Side-Out for AWAY (Setter in Z3 rotates clockwise to Z2 -> R2)
     event1 = state.register_rally_point(winner=TeamSide.AWAY)
     assert event1.side_out_occurred is True
     assert state.serving_team == TeamSide.AWAY
-    assert state.get_rotation(TeamSide.AWAY) == Rotation.R4  # R3 -> R4
+    assert state.get_rotation(TeamSide.AWAY) == Rotation.R2  # R3 -> R2
     assert state.get_rotation(TeamSide.HOME) == Rotation.R1  # Unchanged
 
-    # HOME wins the next rally -> Side-Out for HOME
+    # HOME wins the next rally -> Side-Out for HOME (Setter in Z1 rotates clockwise to Z6 -> R6)
     event2 = state.register_rally_point(winner=TeamSide.HOME)
     assert event2.side_out_occurred is True
     assert state.serving_team == TeamSide.HOME
-    assert state.get_rotation(TeamSide.HOME) == Rotation.R2  # R1 -> R2
-    assert state.get_rotation(TeamSide.AWAY) == Rotation.R4  # Unchanged
+    assert state.get_rotation(TeamSide.HOME) == Rotation.R6  # R1 -> R6
+    assert state.get_rotation(TeamSide.AWAY) == Rotation.R2  # Unchanged
 
 
 def test_full_six_rotation_cyclic_arithmetic() -> None:
-    """Verify full Z_6 cycle: R1 -> R2 -> R3 -> R4 -> R5 -> R6 -> R1."""
+    """Verify full clockwise Z_6 cycle: R1 -> R6 -> R5 -> R4 -> R3 -> R2 -> R1."""
     state = TacticalState(
         home_initial_rotation=Rotation.R1,
         away_initial_rotation=Rotation.R1,
@@ -81,16 +81,16 @@ def test_full_six_rotation_cyclic_arithmetic() -> None:
     )
 
     expected_sequence = [
-        Rotation.R2,
-        Rotation.R3,
-        Rotation.R4,
-        Rotation.R5,
         Rotation.R6,
+        Rotation.R5,
+        Rotation.R4,
+        Rotation.R3,
+        Rotation.R2,
         Rotation.R1,
     ]
 
     for expected_rot in expected_sequence:
-        # HOME wins side-out -> rotates
+        # HOME wins side-out -> rotates clockwise
         state.register_rally_point(winner=TeamSide.HOME)
         assert state.get_rotation(TeamSide.HOME) == expected_rot
         # Give serve back to AWAY so HOME can side-out again
@@ -99,8 +99,13 @@ def test_full_six_rotation_cyclic_arithmetic() -> None:
 
 def test_inferred_roles_across_rotations_without_ocr() -> None:
     """
-    Verify that TacticalState accurately infers where the Setter, Opposite,
-    Outside Hitters, Middle Blockers, and Libero are located in R1 through R6.
+    Verify that TacticalState maps R1..R6 directly to Setter in Z1..Z6:
+    - R1 -> Setter in Z1
+    - R2 -> Setter in Z2
+    - R3 -> Setter in Z3
+    - R4 -> Setter in Z4
+    - R5 -> Setter in Z5
+    - R6 -> Setter in Z6
     """
     state = TacticalState(
         home_initial_rotation=Rotation.R1,
@@ -108,22 +113,12 @@ def test_inferred_roles_across_rotations_without_ocr() -> None:
         initial_server=TeamSide.HOME,
     )
 
-    # In R1: Setter is in Zone 1, Opposite is diagonal in Zone 4
-    snap_r1 = state.infer_formation(TeamSide.HOME, use_libero_in_back_row=True)
-    assert snap_r1.setter_zone == CourtZone.Z1
-    assert snap_r1.setter_is_front_row is False
-    assert snap_r1.zone_roles[CourtZone.Z1] == PlayerRole.SETTER
-    assert snap_r1.zone_roles[CourtZone.Z4] == PlayerRole.OPPOSITE
-    assert snap_r1.zone_roles[CourtZone.Z3] == PlayerRole.MIDDLE_1
-    assert snap_r1.zone_roles[CourtZone.Z6] == PlayerRole.LIBERO  # Replaces back-row MB2
-
-    # Advance HOME to R4 (3 side-outs later: Setter is in Zone 4, Opposite in Zone 1)
-    state.set_rotation(TeamSide.HOME, Rotation.R4)
-    snap_r4 = state.infer_formation(TeamSide.HOME, use_libero_in_back_row=True)
-    assert snap_r4.setter_zone == CourtZone.Z4
-    assert snap_r4.setter_is_front_row is True
-    assert snap_r4.zone_roles[CourtZone.Z4] == PlayerRole.SETTER
-    assert snap_r4.zone_roles[CourtZone.Z1] == PlayerRole.OPPOSITE
+    for rot in Rotation:
+        state.set_rotation(TeamSide.HOME, rot)
+        snap = state.infer_formation(TeamSide.HOME, use_libero_in_back_row=True)
+        expected_zone = CourtZone(rot.value)
+        assert snap.setter_zone == expected_zone
+        assert snap.zone_roles[expected_zone] == PlayerRole.SETTER
 
 
 def test_set_win_requires_two_point_advantage() -> None:

@@ -136,11 +136,11 @@ def test_interactive_court_click_maps_homography_and_updates_charts() -> None:
 
 
 def test_rotation_override_and_hybrid_hotkey_tagging() -> None:
-    """Verify rotation selector pill and hybrid keyboard shortcut ('v') handler."""
+    """Verify rotation selector pill (R5 -> Setter in Zone 5) and hybrid hotkey ('v')."""
     reset_studio()
     state = override_rotation(RotationOverrideRequest(team="HOME", rotation=5))
     assert state["tactical"]["HOME"]["rotation"] == "R5"
-    assert state["tactical"]["HOME"]["setter_zone"] == 3
+    assert state["tactical"]["HOME"]["setter_zone"] == 5
 
     tagged = process_hybrid_tag(HybridDecisionRequest(hotkey="v"))
     assert len(tagged["recent_attacks"]) > 0

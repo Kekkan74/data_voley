@@ -68,15 +68,13 @@ class CourtZone(int, Enum):
 
 class Rotation(int, Enum):
     """
-    Tactical Rotation States (R1 to R6) in a standard 5-1 system.
-
-    In tactical volleyball analytics:
-    - R1: Setter starts in Zone 1 (Right Back)
-    - R2: After 1 clockwise rotation, Setter is in Zone 6 (Middle Back)
-    - R3: After 2 clockwise rotations, Setter is in Zone 5 (Left Back)
-    - R4: After 3 clockwise rotations, Setter is in Zone 4 (Left Front)
-    - R5: After 4 clockwise rotations, Setter is in Zone 3 (Middle Front)
-    - R6: After 5 clockwise rotations, Setter is in Zone 2 (Right Front)
+    Tactical Rotation States (R1 to R6) defined by the Setter's CourtZone:
+    - R1: Setter is in Zone 1 (Right Back)
+    - R2: Setter is in Zone 2 (Right Front)
+    - R3: Setter is in Zone 3 (Middle Front)
+    - R4: Setter is in Zone 4 (Left Front)
+    - R5: Setter is in Zone 5 (Left Back)
+    - R6: Setter is in Zone 6 (Middle Back)
     """
 
     R1 = 1
@@ -90,22 +88,23 @@ class Rotation(int, Enum):
         """
         Advance to the next tactical rotation upon a side-out (recovery of serve).
 
-        Mathematical transition on the cyclic group Z_6:
-            R_{t+1} = ((R_t - 1 + 1) mod 6) + 1 = (R_t mod 6) + 1
+        Because players rotate clockwise physically on the court
+        (Zone 1 -> Zone 6 -> Zone 5 -> Zone 4 -> Zone 3 -> Zone 2 -> Zone 1),
+        the rotation state transitions as:
+            R1 -> R6 -> R5 -> R4 -> R3 -> R2 -> R1
+            R_{t+1} = ((R_t - 2) mod 6) + 1
         """
-        return Rotation((self.value % 6) + 1)
+        return Rotation(((self.value - 2) % 6) + 1)
 
     @property
     def setter_zone(self) -> CourtZone:
         """
         Return the FIVB CourtZone (1-6) occupied by the Setter in this rotation.
 
-        Mapping formula from R_k (k in 1..6) to CourtZone:
-            z(R_1) = 1
-            z(R_k) = ((1 - (k - 1) - 1) mod 6) + 1 = ((1 - k) mod 6) + 1
+        Direct identity mapping:
+            R1 -> Z1, R2 -> Z2, R3 -> Z3, R4 -> Z4, R5 -> Z5, R6 -> Z6
         """
-        zone_num = ((1 - self.value) % 6) + 1
-        return CourtZone(zone_num)
+        return CourtZone(self.value)
 
 
 class PlayerRole(str, Enum):
